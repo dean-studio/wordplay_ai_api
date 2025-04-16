@@ -32,6 +32,8 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 model = prepare_model_for_kbit_training(model)
+model.config.use_cache = False
+model.gradient_checkpointing_enable()
 
 peft_config = LoraConfig(
     r=8,
