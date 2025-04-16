@@ -69,7 +69,7 @@ WHERE
     (multiple_choice_question IS NOT NULL AND multiple_choice_explanation IS NOT NULL)
     OR
     (ox_quiz_question IS NOT NULL AND ox_quiz_explanation IS NOT NULL)
-  ) LIMIT 100
+  ) LIMIT 10
 """
 
 df = pd.read_sql(query, conn)
