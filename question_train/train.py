@@ -107,12 +107,12 @@ tokenized = dataset.map(tokenize)
 
 training_args = TrainingArguments(
     output_dir="./output",
+    save_strategy="no",
+    num_train_epochs=3,
     per_device_train_batch_size=2,
     gradient_accumulation_steps=4,
-    learning_rate=2e-4,
-    num_train_epochs=3,
     logging_steps=10,
-    save_strategy="epoch",
+    learning_rate=2e-4,
     fp16=True,
     report_to="none"
 )
@@ -126,5 +126,14 @@ trainer = Trainer(
 )
 
 trainer.train()
-model.save_pretrained("./output/koalpaca-lora")
-tokenizer.save_pretrained("./output/koalpaca-lora")
+
+from safetensors.torch import save_file
+
+
+output_dir = "./output/koalpaca-lora"
+os.makedirs(output_dir, exist_ok=True)
+
+state_dict = model.state_dict()
+save_file(state_dict, os.path.join(output_dir, "adapter_model.safetensors"))
+model.peft_config[model.active_adapter].save_pretrained(output_dir)
+tokenizer.save_pretrained(output_dir)
