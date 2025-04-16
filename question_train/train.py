@@ -6,6 +6,7 @@ from peft import prepare_model_for_kbit_training, get_peft_model, LoraConfig, Ta
 import torch
 import os
 
+
 model_name = "beomi/KoAlpaca-Polyglot-5.8B"
 local_path = "./models/koalpaca-5.8b"
 
@@ -34,12 +35,13 @@ model = prepare_model_for_kbit_training(model)
 
 peft_config = LoraConfig(
     r=8,
-    lora_alpha=32,
-    target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],
+    lora_alpha=16,
+    target_modules=["query_key_value", "dense", "dense_h_to_4h", "dense_4h_to_h"],
     lora_dropout=0.05,
     bias="none",
     task_type=TaskType.CAUSAL_LM
 )
+
 
 model = get_peft_model(model, peft_config)
 
