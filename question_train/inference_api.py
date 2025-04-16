@@ -8,10 +8,11 @@ import json
 
 app = FastAPI()
 
-base_model_path = "./models/koalpaca-5.8b"
+base_model_path = "beomi/KoAlpaca-Polyglot-5.8B"  # ❗ 훈련할 때도 이걸로 했지?
 lora_adapter_path = "./output/koalpaca-lora"
 
 tokenizer = AutoTokenizer.from_pretrained(lora_adapter_path, use_fast=True)
+
 base_model = AutoModelForCausalLM.from_pretrained(
     base_model_path,
     torch_dtype=torch.float16,
