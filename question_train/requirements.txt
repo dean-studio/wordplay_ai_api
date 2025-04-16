@@ -1,0 +1,8 @@
+transformers==4.39.3
+datasets==2.18.0
+peft==0.10.0
+accelerate==0.29.3
+bitsandbytes==0.42.0
+pymysql==1.1.0
+pandas==2.2.2
+torch==2.2.2+cu118
