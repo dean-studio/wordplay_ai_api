@@ -8,12 +8,25 @@ import json
 
 app = FastAPI()
 
-base_model = "./models/koalpaca-5.8b"
-adapter_path = "./output/koalpaca-lora"
+base_model_path = "./models/koalpaca-5.8b"
+lora_adapter_path = "./output/koalpaca-lora"
 
-tokenizer = AutoTokenizer.from_pretrained(adapter_path, use_fast=True)
-model = AutoModelForCausalLM.from_pretrained(base_model, torch_dtype=torch.float16, device_map="auto")
-model = PeftModel.from_pretrained(model, adapter_path)
+tokenizer = AutoTokenizer.from_pretrained(lora_adapter_path, use_fast=True)
+base_model = AutoModelForCausalLM.from_pretrained(
+    base_model_path,
+    torch_dtype=torch.float16,
+    device_map="auto"
+)
+
+model = PeftModel.from_pretrained(
+    base_model,
+    lora_adapter_path,
+    is_trainable=False
+)
+
+# tokenizer = AutoTokenizer.from_pretrained(adapter_path, use_fast=True)
+# model = AutoModelForCausalLM.from_pretrained(base_model, torch_dtype=torch.float16, device_map="auto")
+# model = PeftModel.from_pretrained(model, adapter_path)
 model.eval()
 
 class QuestionRequest(BaseModel):
