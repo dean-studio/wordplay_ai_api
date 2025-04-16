@@ -47,10 +47,10 @@ model = get_peft_model(model, peft_config)
 
 ### ✅ MySQL → pandas
 conn = pymysql.connect(
-    host='localhost',
-    user='your_user',
-    password='your_pw',
-    db='your_db',
+    host='wordplayapi.mycafe24.com',
+    user='wordplayapi',
+    password='Hazbola2021!',
+    db='wordplayapi',
     charset='utf8mb4'
 )
 
