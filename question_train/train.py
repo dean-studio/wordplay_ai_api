@@ -71,6 +71,9 @@ WHERE
 """
 
 df = pd.read_sql(query, conn)
+
+print(df)
+
 conn.close()
 
 ### ✅ 객체 리스트 만들기
