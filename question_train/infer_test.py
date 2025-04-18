@@ -1,6 +1,6 @@
 # Filename: infer_test.py
 
-# 환경 변수 설정: 파편화 문제 완화를 위해
+# 환경 변수 설정: 메모리 파편화 문제 완화를 위해
 import os
 
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
@@ -13,13 +13,13 @@ from pydantic import BaseModel
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
-# 로그 설정: DEBUG 레벨
+# 로그 설정: DEBUG 레벨 (디버깅에 도움이 됩니다)
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="KoAlpaca Inference & Q/A API",
-    description="beomi/KoAlpaca-Polyglot-5.8B 모델을 GPU에 강제로 로드하여 텍스트 생성 및 질문 응답 API입니다."
+    description="koAlpaca-Polyglot-5.8B 모델을 8-bit 양자화와 자동 device mapping을 사용하여 GPU 메모리 사용량을 최적화한 API입니다."
 )
 
 MODEL_NAME = "beomi/KoAlpaca-Polyglot-5.8B"
@@ -27,21 +27,21 @@ device = "cuda:0" if torch.cuda.is_available() else "cpu"
 logger.info(f"사용할 디바이스: {device}")
 
 try:
-    logger.info(f"모델 {MODEL_NAME} 로딩 시작 (강제 GPU 할당: device_map={{'': '{device}'}})")
-    # 모델을 GPU에 강제로 로드합니다.
+    logger.info(f"모델 {MODEL_NAME} 로딩 시작")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    # load_in_8bit=True 옵션을 사용하면 메모리 사용량이 크게 줄어듭니다.
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_NAME,
         torch_dtype=torch.float16,
-        device_map={"": device}  # 모든 파라미터를 지정된 GPU에 할당
+        load_in_8bit=True,  # 8-bit 양자화를 통해 메모리 사용량 절감 (bitsandbytes 필요)
+        device_map="auto"  # 사용 가능한 디바이스에 따라 자동으로 할당
     )
     logger.info("모델과 토크나이저 로딩 완료")
 except Exception as e:
-    logger.exception("모델 강제 GPU 로딩 중 에러 발생")
-    # 에러 메시지 안내: 만약 여기서 OOM 오류가 난다면, 강제 GPU 할당 대신 device_map='auto' 사용을 고려하거나 load_in_8bit 등을 검토하세요.
+    logger.exception("모델 로딩 중 에러 발생")
     raise RuntimeError(f"모델 로딩 중 에러 발생: {e}")
 
-# 디버깅: 모델의 모든 파라미터가 실제로 어느 디바이스에 있는지 출력 (GPU 할당 여부 확인)
+# 디버깅용: 모델의 각 파라미터가 어느 디바이스에 할당되었는지 출력
 for name, param in model.named_parameters():
     logger.debug(f"{name}: {param.device}")
 
@@ -63,8 +63,8 @@ async def infer(request: InferenceRequest):
     try:
         logger.debug(f"[infer] 요청 수신: {request}")
         tokens = tokenizer(request.prompt, return_tensors="pt")
-        logger.debug(f"[infer] 토큰 생성 결과: {tokens}")
-        tokens.pop("token_type_ids", None)  # 사용하지 않는 파라미터 제거
+        tokens.pop("token_type_ids", None)  # 사용하지 않는 token_type_ids 제거
+        # 모델이 자동으로 할당된 디바이스로 토큰도 전송합니다.
         tokens = {k: v.to(device) for k, v in tokens.items()}
         logger.debug(f"[infer] 토큰을 {device}로 전송 완료")
 
@@ -92,10 +92,7 @@ async def ask(request: QuestionRequest):
     try:
         logger.debug(f"[ask] 요청 수신: {request}")
         prompt_text = f"질문: {request.question}\n답변:"
-        logger.debug(f"[ask] 구성된 프롬프트: {prompt_text}")
-
         tokens = tokenizer(prompt_text, return_tensors="pt")
-        logger.debug(f"[ask] 토큰 생성 결과: {tokens}")
         tokens.pop("token_type_ids", None)
         tokens = {k: v.to(device) for k, v in tokens.items()}
         logger.debug(f"[ask] 토큰을 {device}로 전송 완료")
@@ -112,7 +109,6 @@ async def ask(request: QuestionRequest):
         logger.debug(f"[ask] 모델 추론 완료, 소요 시간: {elapsed:.2f}초")
 
         generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        logger.debug(f"[ask] 생성된 텍스트: {generated_text}")
         answer = generated_text.split("답변:")[-1].strip()
         logger.debug(f"[ask] 추출된 답변: {answer}")
         return {"answer": answer}
@@ -122,4 +118,5 @@ async def ask(request: QuestionRequest):
 
 
 if __name__ == "__main__":
-    uvicorn.run("infer_test:app", host="0.0.0.0", port=8000, reload=True)
+    # reload=False로 실행하여 모델이 중복 로드되는 것을 방지합니다.
+    uvicorn.run("infer_test:app", host="0.0.0.0", port=8000, reload=False)
