@@ -1,113 +1,128 @@
-from fastapi import FastAPI
+# Filename: infer_test.py
+
+# 환경 변수 설정: 메모리 파편화 문제 완화를 위해
+import os
+
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
+import uvicorn
+import logging
+import time
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from peft import PeftModel
 import torch
-import re
-import json
 
-app = FastAPI()
+# peft 라이브러리 임포트 (LoRA 어댑터 로드를 위해)
+from peft import PeftModel
 
-base_model_path = "beomi/KoAlpaca-Polyglot-5.8B"
-lora_adapter_path = "./output/koalpaca-lora"
+# 로그 설정: DEBUG 레벨
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
-tokenizer = AutoTokenizer.from_pretrained(lora_adapter_path, use_fast=True)
-
-base_model = AutoModelForCausalLM.from_pretrained(
-    base_model_path,
-    torch_dtype=torch.float16,
-    device_map="auto"
+app = FastAPI(
+    title="KoAlpaca Inference & Q/A API",
+    description="koAlpaca-Polyglot-5.8B 모델에 LoRA 어댑터를 추가로 로드하여 텍스트 생성 및 질문 응답하는 API입니다."
 )
 
-model = PeftModel.from_pretrained(
-    base_model,
-    lora_adapter_path,
-    is_trainable=False
-)
+MODEL_NAME = "beomi/KoAlpaca-Polyglot-5.8B"
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
+logger.info(f"사용할 디바이스: {device}")
 
-# tokenizer = AutoTokenizer.from_pretrained(adapter_path, use_fast=True)
-# model = AutoModelForCausalLM.from_pretrained(base_model, torch_dtype=torch.float16, device_map="auto")
-# model = PeftModel.from_pretrained(model, adapter_path)
-model.eval()
+try:
+    logger.info(f"모델 {MODEL_NAME} 로딩 시작")
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    model = AutoModelForCausalLM.from_pretrained(
+        MODEL_NAME,
+        torch_dtype=torch.float16,
+        load_in_8bit=True,  # 8-bit 양자화로 메모리 사용량 최적화 (bitsandbytes 라이브러리 필요)
+        device_map="auto"  # 사용 가능한 디바이스에 자동 할당 (GPU/CPU 혼용)
+    )
+    logger.info("모델과 토크나이저 로딩 완료")
+except Exception as e:
+    logger.exception("모델 로딩 중 에러 발생")
+    raise RuntimeError(f"모델 로딩 중 에러 발생: {e}")
 
+try:
+    lora_adapter_path = "./output/koalpaca-lora"
+    logger.info("LoRA 어댑터 로딩 시작")
+    model = PeftModel.from_pretrained(model, lora_adapter_path)
+    logger.info("LoRA 어댑터 로딩 완료")
+except Exception as e:
+    logger.exception("LoRA 어댑터 로딩 중 에러 발생")
+    raise RuntimeError(f"LoRA 어댑터 로딩 중 에러 발생: {e}")
+
+
+# [텍스트 생성] 요청 Body 모델
+class InferenceRequest(BaseModel):
+    prompt: str
+    max_length: int = 200
+
+
+# [질문 응답] 요청 Body 모델
 class QuestionRequest(BaseModel):
     question: str
+    max_length: int = 200
 
-@app.post("/infer")
-async def infer(req: QuestionRequest):
-    prompt = f"""
-다음 질문을 바탕으로 다음과 같은 형식으로 문제를 생성해줘:
 
-1. 객관식 문제
-- 질문: ?
-- 보기: 1. 보기1 / 2. 보기2 / 3. 보기3 / 4. 보기4
-- 정답: 번호
-- 해설: ...
+@app.post("/infer", summary="텍스트 생성", description="주어진 프롬프트 기반으로 텍스트를 생성합니다.")
+async def infer(request: InferenceRequest):
+    try:
+        logger.debug(f"[infer] 요청 수신: {request}")
+        tokens = tokenizer(request.prompt, return_tensors="pt")
+        tokens.pop("token_type_ids", None)
+        tokens = {k: v.to(device) for k, v in tokens.items()}
+        logger.debug(f"[infer] 토큰을 {device}로 전송 완료")
 
-2. OX 문제
-- 질문: ?
-- 정답: O 또는 X
-- 해설: ...
-
-3. 주관식 해설
-- 설명: 해당 질문에 대한 사실 기반 설명
-
-질문: {req.question}
-    """.strip()
-
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-    with torch.no_grad():
+        start_time = time.time()
         outputs = model.generate(
-            **inputs,
-            max_new_tokens=512,
-            temperature=0.7,
+            **tokens,
+            max_length=request.max_length,
+            do_sample=True,
             top_p=0.95,
-            do_sample=True
+            top_k=50
         )
+        elapsed = time.time() - start_time
+        logger.debug(f"[infer] 모델 추론 완료, 소요 시간: {elapsed:.2f}초")
 
-    output = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    result = output.replace(prompt, "").strip()
+        result = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        logger.debug(f"[infer] 디코딩 결과: {result}")
+        return {"result": result}
+    except Exception as e:
+        logger.exception("[infer] 추론 중 에러 발생")
+        raise HTTPException(status_code=500, detail=f"Inference error: {str(e)}")
 
-    # 간단한 파싱
-    mc_question = re.search(r"객관식 문제\s*- 질문: (.*?)\n", result)
-    options = re.findall(r"\d+\.\s*(.*?)\s*/?", result)
-    answer = re.search(r"정답: (\d+)", result)
-    explanation = re.search(r"해설: (.*?)\n", result)
 
-    ox_q = re.search(r"OX 문제\s*- 질문: (.*?)\n", result)
-    ox_a = re.search(r"정답: ([OX])", result)
-    ox_exp = re.search(r"OX 문제.*?해설: (.*?)\n", result, re.DOTALL)
+@app.post("/ask", summary="질문 응답", description="사용자의 질문에 대해 모델이 답변을 생성합니다.")
+async def ask(request: QuestionRequest):
+    try:
+        logger.debug(f"[ask] 요청 수신: {request}")
+        prompt_text = f"질문: {request.question}\n답변:"
+        tokens = tokenizer(prompt_text, return_tensors="pt")
+        tokens.pop("token_type_ids", None)
+        tokens = {k: v.to(device) for k, v in tokens.items()}
+        logger.debug(f"[ask] 토큰을 {device}로 전송 완료")
 
-    subjective = re.search(r"설명: (.+)", result)
+        start_time = time.time()
+        outputs = model.generate(
+            **tokens,
+            max_length=request.max_length,
+            do_sample=True,
+            top_p=0.95,
+            top_k=50
+        )
+        elapsed = time.time() - start_time
+        logger.debug(f"[ask] 모델 추론 완료, 소요 시간: {elapsed:.2f}초")
 
-    # 간단한 분류
-    category = "색깔"
-    category_idx = 102
-    grade_level = "초등 1학년"
-    difficulty = 1
+        generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        answer = generated_text.split("답변:")[-1].strip()
+        logger.debug(f"[ask] 추출된 답변: {answer}")
+        return {"answer": answer}
+    except Exception as e:
+        logger.exception("[ask] 질문 응답 처리 중 에러 발생")
+        raise HTTPException(status_code=500, detail=f"Question answering error: {str(e)}")
 
-    response = {
-        "question": req.question,
-        "category": category,
-        "category_idx": category_idx,
-        "grade_level": grade_level,
-        "difficulty": difficulty,
-        "multiple_choice": {
-            "question": mc_question.group(1) if mc_question else None,
-            "options": [{"id": i+1, "value": v.strip()} for i, v in enumerate(options)],
-            "answer": int(answer.group(1)) if answer else None,
-            "explanation": explanation.group(1) if explanation else subjective.group(1) if subjective else ""
-        },
-        "ox_quiz": {
-            "question": ox_q.group(1) if ox_q else None,
-            "answer": True if ox_a and ox_a.group(1) == "O" else False,
-            "explanation": ox_exp.group(1) if ox_exp else ""
-        },
-        "reference_links": {
-            "priority_1": None,
-            "priority_2": None,
-            "priority_3": None
-        }
-    }
 
-    return response
+if __name__ == "__main__":
+    # reload 옵션은 중복 로드를 방지하기 위해 False로 실행합니다.
+    uvicorn.run("infer_test:app", host="0.0.0.0", port=8000, reload=False)
