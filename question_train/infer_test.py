@@ -2,6 +2,7 @@
 
 import uvicorn
 import logging
+import time
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -22,7 +23,7 @@ try:
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_NAME,
-        torch_dtype=torch.float16,
+        torch_dtype=torch.float16,  # GPU 사용 시 float16 권장
         device_map="auto"
     )
     logger.info("모델과 토크나이저 로딩 완료")
@@ -34,16 +35,16 @@ except Exception as e:
 # [텍스트 생성] 요청 Body 모델
 class InferenceRequest(BaseModel):
     prompt: str
-    max_length: int = 200  # 생성을 위한 최대 길이
+    max_length: int = 200  # 생성 최대 길이 (필요에 따라 조정)
 
 
 # [질문 응답] 요청 Body 모델
 class QuestionRequest(BaseModel):
     question: str
-    max_length: int = 200  # 응답 텍스트의 최대 길이
+    max_length: int = 200  # 답변 텍스트의 최대 길이 (필요에 따라 조정)
 
 
-@app.post("/infer", summary="텍스트 생성", description="주어진 프롬프트를 기반으로 텍스트를 생성합니다.")
+@app.post("/infer", summary="텍스트 생성", description="주어진 프롬프트 기반으로 텍스트를 생성합니다.")
 async def infer(request: InferenceRequest):
     try:
         logger.debug(f"[infer] 요청 수신: {request}")
@@ -53,6 +54,7 @@ async def infer(request: InferenceRequest):
         tokens = {k: v.to(model.device) for k, v in tokens.items()}
         logger.debug("[infer] 토큰을 모델 디바이스로 전송 완료")
 
+        start_time = time.time()  # 추론 시작 시간
         outputs = model.generate(
             **tokens,
             max_length=request.max_length,
@@ -60,7 +62,9 @@ async def infer(request: InferenceRequest):
             top_p=0.95,
             top_k=50
         )
-        logger.debug("[infer] 모델 추론 완료")
+        elapsed = time.time() - start_time  # 추론 소요 시간 측정
+        logger.debug(f"[infer] 모델 추론 완료, 소요 시간: {elapsed:.2f} 초")
+
         result = tokenizer.decode(outputs[0], skip_special_tokens=True)
         logger.debug(f"[infer] 디코딩 결과: {result}")
         return {"result": result}
@@ -69,7 +73,7 @@ async def infer(request: InferenceRequest):
         raise HTTPException(status_code=500, detail=f"Inference error: {str(e)}")
 
 
-@app.post("/ask", summary="질문 응답", description="사용자의 질문에 대해 모델이 답변을 생성합니다.")
+@app.post("/ask", summary="질문 응답", description="사용자의 질문에 대해 모델이 자동으로 답변을 생성합니다.")
 async def ask(request: QuestionRequest):
     try:
         logger.debug(f"[ask] 요청 수신: {request}")
@@ -83,6 +87,7 @@ async def ask(request: QuestionRequest):
         tokens = {k: v.to(model.device) for k, v in tokens.items()}
         logger.debug("[ask] 토큰을 모델 디바이스로 전송 완료")
 
+        start_time = time.time()  # 추론 시작 시간 기록
         outputs = model.generate(
             **tokens,
             max_length=request.max_length,
@@ -90,7 +95,9 @@ async def ask(request: QuestionRequest):
             top_p=0.95,
             top_k=50
         )
-        logger.debug("[ask] 모델 추론 완료")
+        elapsed = time.time() - start_time  # 추론 소요 시간 측정
+        logger.debug(f"[ask] 모델 추론 완료, 소요 시간: {elapsed:.2f} 초")
+
         generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
         logger.debug(f"[ask] 생성된 텍스트: {generated_text}")
         answer = generated_text.split("답변:")[-1].strip()
