@@ -12,6 +12,6 @@ POST http://34.53.35.1:8000/ask
 Content-Type: application/json
 
 {
-  "question": "안녕?",
-  "max_length": 150
+  "question": "일본의 수도는?",
+  "max_length": 1500
 }

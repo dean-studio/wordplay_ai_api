@@ -214,7 +214,7 @@ def main():
         (multiple_choice_question IS NOT NULL AND multiple_choice_explanation IS NOT NULL)
         OR
         (ox_quiz_question IS NOT NULL AND ox_quiz_explanation IS NOT NULL)
-      ) LIMIT 10
+      ) LIMIT 100
     """
     df = load_data_from_mysql(
         sql_query,
