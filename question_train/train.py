@@ -142,7 +142,7 @@ def train_model(model, tokenizer, tokenized_dataset):
     training_args = TrainingArguments(
         output_dir="./output",
         save_strategy="no",
-        num_train_epochs=3,
+        num_train_epochs=5,
         per_device_train_batch_size=2,
         gradient_accumulation_steps=4,
         logging_steps=10,
@@ -191,8 +191,10 @@ def main():
     tokenizer, local_path = load_or_download_model(MODEL_NAME, LOCAL_PATH)
     model = load_model(tokenizer, local_path)
 
+    logger.info(f"Trainer 사용 디바이스: {next(model.parameters()).device}")
+
     # (원하는 경우, 타겟 모듈 이름 확인 로그는 유지)
-    logger.debug("모델 파라미터 이름 중 타겟 모듈 관련 항목 출력:")
+    # logger.debug("모델 파라미터 이름 중 타겟 모듈 관련 항목 출력:")
     # for name, _ in model.named_parameters():
     #     if any(substr in name for substr in ["query_key_value", "dense_h_to_4h", "dense_4h_to_h", "dense"]):
     #         logger.debug(name)
