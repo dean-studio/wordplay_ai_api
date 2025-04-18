@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 MODEL_NAME = "beomi/KoAlpaca-Polyglot-5.8B"
 LOCAL_PATH = "./models/koalpaca-5.8b"
 
+logger.info(f"GPU 사용 여부: {torch.cuda.is_available()}")
+logger.info(f"사용 중인 디바이스: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
 
 def load_or_download_model(model_name: str, local_path: str):
     if not os.path.exists(local_path):
