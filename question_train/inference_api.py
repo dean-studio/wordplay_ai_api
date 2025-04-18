@@ -13,8 +13,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
 # peft 라이브러리 임포트 (LoRA 어댑터 로드를 위해)
-from peft import PeftModel
-
+from peft import PeftModel, prepare_model_for_kbit_training
 # 로그 설정: DEBUG 레벨
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -30,22 +29,33 @@ LOCAL_PATH = "./models/koalpaca-5.8b"
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 logger.info(f"사용할 디바이스: {device}")
 
-# 로컬 경로에 모델이 있다면 해당 경로에서 불러오기
+# 로컬 경로에 모델이 있다면 해당 경로에서 불러오기 (훈련 시 사용했던 동일 조건)
 try:
     logger.info(f"로컬 모델 경로({LOCAL_PATH})에서 모델 로드 시작")
     tokenizer = AutoTokenizer.from_pretrained(LOCAL_PATH)
+    # 4-bit 양자화 설정 (train.py와 동일)
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.bfloat16
+    )
     model = AutoModelForCausalLM.from_pretrained(
         LOCAL_PATH,
-        torch_dtype=torch.float16,
-        load_in_8bit=True,  # 8-bit 양자화로 메모리 사용량 최적화 (bitsandbytes 라이브러리 필요)
-        device_map="auto"   # 사용 가능한 디바이스에 자동 할당 (GPU/CPU 혼용)
+        quantization_config=bnb_config,
+        device_map="auto"
     )
-    logger.info("모델과 토크나이저 로컬 로드 완료")
+    logger.info("로컬 모델 로드 완료 (4-bit 양자화, 자동 device mapping).")
+
+    # train.py와 동일하게 k-bit 훈련에 맞게 모델 준비
+    model = prepare_model_for_kbit_training(model)
+    model.config.use_cache = False
+    model.gradient_checkpointing_enable()
+    logger.info("모델이 k-bit 훈련에 맞게 준비됨 (캐시 비활성화, gradient checkpointing 활성화).")
 except Exception as e:
     logger.exception("모델 로딩 중 에러 발생")
     raise RuntimeError(f"모델 로딩 중 에러 발생: {e}")
 
-# 로컬 모델에서 로드한 후, LoRA 어댑터 적용
+# 로컬 모델에 LoRA 어댑터 로드 (튜닝 시와 동일한 어댑터 체크포인트 사용)
 try:
     lora_adapter_path = "./output/koalpaca-lora"
     logger.info("LoRA 어댑터 로딩 시작")
