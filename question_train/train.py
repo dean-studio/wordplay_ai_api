@@ -191,9 +191,9 @@ def main():
 
     # (원하는 경우, 타겟 모듈 이름 확인 로그는 유지)
     logger.debug("모델 파라미터 이름 중 타겟 모듈 관련 항목 출력:")
-    for name, _ in model.named_parameters():
-        if any(substr in name for substr in ["query_key_value", "dense_h_to_4h", "dense_4h_to_h", "dense"]):
-            logger.debug(name)
+    # for name, _ in model.named_parameters():
+    #     if any(substr in name for substr in ["query_key_value", "dense_h_to_4h", "dense_4h_to_h", "dense"]):
+    #         logger.debug(name)
 
     # LoRA 어댑터 적용
     model = apply_lora(model)
@@ -223,12 +223,12 @@ def main():
         password='Hazbola2021!',
         db='wordplayapi'
     )
-    logger.debug("MySQL DataFrame 샘플:\n%s", df.head().to_string())
+    # logger.debug("MySQL DataFrame 샘플:\n%s", df.head().to_string())
     dataset = preprocess_data(df)
 
     # 토크나이즈
     tokenized_dataset = dataset.map(lambda x: tokenize_fn(x, tokenizer))
-    logger.info("토크나이즈 완료. 예시 토크나이즈 결과: %s", tokenized_dataset[0])
+    # logger.info("토크나이즈 완료. 예시 토크나이즈 결과: %s", tokenized_dataset[0])
 
     # 학습
     trainer = train_model(model, tokenizer, tokenized_dataset)
