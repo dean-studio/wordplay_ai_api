@@ -43,6 +43,8 @@ class QuestionRequest(BaseModel):
     question: str
     max_length: int = 200  # 답변 텍스트의 최대 길이 (필요에 따라 조정)
 
+for name, param in model.named_parameters():
+    print(name, param.device)
 
 @app.post("/infer", summary="텍스트 생성", description="주어진 프롬프트 기반으로 텍스트를 생성합니다.")
 async def infer(request: InferenceRequest):
