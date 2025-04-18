@@ -8,7 +8,7 @@ import json
 
 app = FastAPI()
 
-base_model_path = "beomi/KoAlpaca-Polyglot-5.8B"  # ❗ 훈련할 때도 이걸로 했지?
+base_model_path = "beomi/KoAlpaca-Polyglot-5.8B"
 lora_adapter_path = "./output/koalpaca-lora"
 
 tokenizer = AutoTokenizer.from_pretrained(lora_adapter_path, use_fast=True)
