@@ -1,6 +1,9 @@
 # wordplay_ai_api
 wordplay_ai_api22
 
+## redoc
+http://34.53.35.1:8000/redoc
+
 
 ## venv
 
