@@ -2,6 +2,11 @@ from peft import LoraConfig, get_peft_model, TaskType
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
 from datasets import load_dataset, concatenate_datasets
 from trl import SFTTrainer
+import os
+
+# TensorBoard 로그 디렉토리 생성
+tensorboard_dir = "./tensorboard_logs"
+os.makedirs(tensorboard_dir, exist_ok=True)
 
 # 모델 및 토크나이저 로드
 model_id = "naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-1.5B"
@@ -22,6 +27,7 @@ lora_config = LoraConfig(
 peft_model = get_peft_model(model, lora_config)
 
 # 데이터셋 로드
+print("데이터셋 로딩 중...")
 ko_commercial = load_dataset("MarkrAI/KoCommercial-Dataset")
 korquad_v2 = load_dataset("KorQuAD/squad_kor_v2", trust_remote_code=True)
 
@@ -43,10 +49,11 @@ def convert_korquad_format(example):
 
 
 # KorQuAD 데이터셋 형식 변환
+print("KorQuAD 데이터 변환 중...")
 korquad_v2_converted = korquad_v2.map(convert_korquad_format)
 
 # 두 데이터셋 합치기 (필요한 필드만 선택)
-# 두 데이터셋의 구조가 다를 수 있으므로 필요한 필드만 선택
+print("데이터셋 병합 중...")
 ko_commercial_subset = ko_commercial["train"].select_columns(["instruction", "input", "output"])
 korquad_v2_subset = korquad_v2_converted["train"].select_columns(["instruction", "input", "output"])
 
@@ -64,22 +71,32 @@ def format_for_clova(example):
     return {"text": tokenizer.apply_chat_template(chat, tokenize=False)}
 
 
+print("데이터 형식 변환 중...")
 formatted_dataset = combined_dataset.map(format_for_clova)
 
-# 학습 설정
+# 학습 설정 - TensorBoard 로깅 추가
+print("학습 설정 구성 중...")
 training_args = TrainingArguments(
     output_dir="./clova-lora-with-korquad",
     per_device_train_batch_size=4,
     gradient_accumulation_steps=4,
     learning_rate=2e-4,
-    max_steps=15000,  # 데이터셋이 커졌으므로 더 많은 스텝
+    max_steps=15000,
     save_steps=1000,
-    logging_steps=100,
+
+    # TensorBoard 로깅 설정 추가
+    logging_dir=tensorboard_dir,  # TensorBoard 로그 디렉토리
+    logging_strategy="steps",  # 로깅 전략
+    logging_steps=10,  # 10 스텝마다 로깅 (더 자주 기록)
+    report_to=["tensorboard"],  # TensorBoard에 보고
+
+    # 기존 설정
     fp16=True,
     optim="paged_adamw_8bit",
 )
 
 # 트레이너 설정
+print("트레이너 초기화 중...")
 trainer = SFTTrainer(
     model=peft_model,
     args=training_args,
@@ -90,7 +107,10 @@ trainer = SFTTrainer(
 )
 
 # 학습 시작
+print("학습 시작, TensorBoard 로그가 생성됩니다...")
 trainer.train()
 
 # 모델 저장
+print("학습 완료, 모델 저장 중...")
 peft_model.save_pretrained("./clova-lora-korquad-final")
+print("모든 과정이 완료되었습니다!")

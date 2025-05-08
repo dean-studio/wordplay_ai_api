@@ -15,7 +15,7 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 LOG_FILE="./logs/training_$TIMESTAMP.log"
 
 echo "Starting TensorBoard on port 5000..."
-# TensorBoard를 백그라운드에서 실행하고 PID 저장 (포트 5000 사용)
+
 tensorboard --logdir=$TENSORBOARD_LOG_DIR --host=0.0.0.0 --port=5000 > ./logs/tensorboard_$TIMESTAMP.log 2>&1 &
 TENSORBOARD_PID=$!
 

@@ -9,6 +9,11 @@ http://34.53.35.1:8000/redoc
 35.233.152.5:5000 /tensor board
 
 ## venv
+https://huggingface.co/datasets/MarkrAI/KoCommercial-Dataset
+
+https://huggingface.co/datasets/KorQuAD/squad_kor_v2
+
+## venv
 
 ```
 # 1. venv 만들기
