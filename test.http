@@ -12,6 +12,6 @@ POST http://34.53.35.1:8000/ask
 Content-Type: application/json
 
 {
-  "question": "일본의 수도는?",
+  "question": "머리를 자르면 새로운 머리가 두 개 자라나는 뱀 괴물은 무엇일까요?",
   "max_length": 1500
 }
