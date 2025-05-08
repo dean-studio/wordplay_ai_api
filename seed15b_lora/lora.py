@@ -5,24 +5,38 @@ from transformers import Trainer
 import os
 import json
 import torch
+import gc
+
+# 메모리 초기화
+gc.collect()
+torch.cuda.empty_cache()
+
+# GPU 메모리 설정
+if torch.cuda.is_available():
+    torch.cuda.set_per_process_memory_fraction(0.9)  # GPU 메모리 사용량 제한
+    print(f"GPU 메모리: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
 
 # TensorBoard 로그 디렉토리 생성
 tensorboard_dir = "./tensorboard_logs"
 os.makedirs(tensorboard_dir, exist_ok=True)
 
-# 모델 및 토크나이저 로드
+# 모델 및 토크나이저 로드 (8비트 양자화 적용)
 model_id = "naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-1.5B"
-model = AutoModelForCausalLM.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    load_in_8bit=True,  # 메모리 절약을 위한 8비트 양자화
+    device_map="auto"  # 자동 장치 배치
+)
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 # 특수 토큰 설정 확인
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
-# LoRA 설정
+# LoRA 설정 (더 작은 rank 사용)
 lora_config = LoraConfig(
-    r=16,
-    lora_alpha=32,
+    r=8,  # rank 값 감소 (16 -> 8)
+    lora_alpha=16,  # alpha 값 감소 (32 -> 16)
     target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
     lora_dropout=0.05,
     bias="none",
@@ -32,10 +46,13 @@ lora_config = LoraConfig(
 # LoRA 모델 생성
 peft_model = get_peft_model(model, lora_config)
 
-# KoCommercial-Dataset 로드
+# KoCommercial-Dataset 로드 (샘플 수 제한)
 print("KoCommercial-Dataset 로딩 중...")
 ko_commercial = load_dataset("MarkrAI/KoCommercial-Dataset")
-print(f"KoCommercial-Dataset 로드 성공: {len(ko_commercial['train'])} 샘플")
+# 메모리 절약을 위해 샘플 수 제한 (필요시 주석 해제)
+# ko_commercial_subset = ko_commercial["train"].select(range(100000))  # 10만 샘플로 제한
+ko_commercial_subset = ko_commercial["train"]
+print(f"선택된 KoCommercial 데이터: {len(ko_commercial_subset)} 샘플")
 
 
 # KoCommercial-Dataset 준비
@@ -53,21 +70,22 @@ def prepare_ko_commercial(example):
 
 
 print("\nKoCommercial 데이터 변환 중...")
-ko_commercial_formatted = ko_commercial["train"].map(prepare_ko_commercial)
+ko_commercial_formatted = ko_commercial_subset.map(
+    prepare_ko_commercial,
+    batched=True,
+    batch_size=1000  # 배치 처리로 속도 향상
+)
 print(f"변환된 KoCommercial 데이터: {len(ko_commercial_formatted)} 샘플")
 
 # KorQuAD V2 데이터셋 로드 및 처리
 print("\nKorQuAD V2 데이터셋 로드 중...")
 try:
-    # KorQuAD V2 로드
+    # KorQuAD V2 로드 (샘플 수 제한)
     korquad_v2 = load_dataset("KorQuAD/squad_kor_v2", trust_remote_code=True)
-    print(f"KorQuAD V2 로드 성공: {len(korquad_v2['train'])} 샘플")
-
-    # 샘플 확인
-    print("\nKorQuAD V2 구조 확인:")
-    sample = korquad_v2["train"][0]
-    print(f"샘플 키: {list(sample.keys())}")
-    print(f"답변 구조: {sample['answer'].keys() if isinstance(sample.get('answer'), dict) else 'Not a dict'}")
+    # 메모리 절약을 위해 샘플 수 제한 (필요시 주석 해제)
+    # korquad_subset = korquad_v2["train"].select(range(50000))  # 5만 샘플로 제한
+    korquad_subset = korquad_v2["train"]
+    print(f"선택된 KorQuAD 데이터: {len(korquad_subset)} 샘플")
 
 
     # 정확한 구조에 맞게 변환 함수 수정
@@ -108,9 +126,11 @@ try:
 
 
     print("\nKorQuAD V2 데이터 변환 중...")
-    korquad_processed = korquad_v2["train"].map(
+    korquad_processed = korquad_subset.map(
         process_korquad_v2,
-        remove_columns=korquad_v2["train"].column_names
+        remove_columns=korquad_subset.column_names,
+        batched=True,
+        batch_size=1000  # 배치 처리로 속도 향상
     )
 
     # None 값 필터링
@@ -127,13 +147,17 @@ except Exception as e:
     print("KoCommercial-Dataset만 사용합니다.")
     combined_dataset = ko_commercial_formatted
 
+# 메모리 정리
+gc.collect()
+torch.cuda.empty_cache()
 
-# 토큰화 및 데이터 셋업
+
+# 토큰화 및 데이터 셋업 (더 작은 max_length 사용)
 def tokenize_function(examples):
     results = tokenizer(
         examples["text"],
         truncation=True,
-        max_length=2048,
+        max_length=1024,  # 시퀀스 길이 감소 (2048 -> 1024)
         padding="max_length",
         return_tensors="pt"
     )
@@ -146,8 +170,13 @@ print("\n데이터셋 토큰화 중...")
 tokenized_dataset = combined_dataset.map(
     tokenize_function,
     batched=True,
+    batch_size=100,  # 배치 크기 감소로 메모리 사용량 제한
     remove_columns=combined_dataset.column_names
 )
+
+# 메모리 정리
+gc.collect()
+torch.cuda.empty_cache()
 
 # 데이터 수집기 설정
 data_collator = DataCollatorForLanguageModeling(
@@ -155,26 +184,30 @@ data_collator = DataCollatorForLanguageModeling(
     mlm=False  # 인과적 언어 모델링
 )
 
-# 학습 설정
+# 학습 설정 (더 작은 배치 크기 사용)
 print("\n학습 설정 구성 중...")
 training_args = TrainingArguments(
     output_dir="./clova-lora-combined",
-    per_device_train_batch_size=4,
-    gradient_accumulation_steps=4,
+    per_device_train_batch_size=1,  # 배치 크기 감소 (4 -> 1)
+    gradient_accumulation_steps=16,  # 그라디언트 누적 단계 증가 (4 -> 16)
     learning_rate=2e-4,
     num_train_epochs=1,
-    save_steps=1000,
+    save_steps=2000,
 
     # TensorBoard 설정
     logging_dir=tensorboard_dir,
     logging_strategy="steps",
-    logging_steps=10,
+    logging_steps=100,
     report_to=["tensorboard"],
 
-    # 기타 설정
-    fp16=torch.cuda.is_available(),
+    # 메모리 최적화 설정
+    fp16=True,
     optim="adamw_torch",
+    gradient_checkpointing=True,  # 그라디언트 체크포인팅 활성화
     remove_unused_columns=False,
+
+    # 디스크 공간 관리
+    save_total_limit=3,  # 최대 3개 체크포인트만 저장
 )
 
 # Trainer 초기화
@@ -184,7 +217,6 @@ trainer = Trainer(
     args=training_args,
     train_dataset=tokenized_dataset,
     data_collator=data_collator,
-    tokenizer=tokenizer,
 )
 
 # 학습 시작
