@@ -63,102 +63,64 @@ try:
     korquad_v2 = load_dataset("KorQuAD/squad_kor_v2", trust_remote_code=True)
     print(f"KorQuAD V2 로드 성공: {len(korquad_v2['train'])} 샘플")
 
-
-    # 개선된 데이터 추출 함수
-    def extract_korquad_v2(examples):
-        records = []
-        count = 0
-        errors = 0
-
-        for idx, example in enumerate(examples):
-            try:
-                # 기본 필드 확인
-                if "context" not in example or "question" not in example:
-                    continue
-
-                # 컨텍스트 및 질문 추출
-                context = example["context"]
-                question = example["question"]
-
-                # 답변 텍스트 추출 시도 - 개선된 로직
-                answer_text = ""
-                if "answers" in example:
-                    answers = example["answers"]
-                    if isinstance(answers, dict) and "text" in answers:
-                        text_value = answers["text"]
-                        if isinstance(text_value, list) and text_value:
-                            answer_text = str(text_value[0])
-                        elif isinstance(text_value, str):
-                            answer_text = text_value
-                        elif isinstance(text_value, dict):
-                            # 딕셔너리인 경우 첫 번째 값 사용
-                            if text_value:
-                                first_key = next(iter(text_value))
-                                answer_text = str(text_value[first_key])
-                        else:
-                            answer_text = str(text_value)
-                    elif isinstance(answers, list) and answers:
-                        if isinstance(answers[0], dict) and "text" in answers[0]:
-                            text_item = answers[0]["text"]
-                            if isinstance(text_item, str):
-                                answer_text = text_item
-                            else:
-                                answer_text = str(text_item)
-
-                if not answer_text and "answer" in example:
-                    answer_value = example["answer"]
-                    if isinstance(answer_value, str):
-                        answer_text = answer_value
-                    else:
-                        answer_text = str(answer_value)
-
-                # 유효한 문자열 답변이 있는 경우에만 추가
-                if answer_text and isinstance(answer_text, str):
-                    answer_text = answer_text.strip()
-                    if len(answer_text) > 0:
-                        # 지시문 형식 변환
-                        instruction = f"다음 문서를 읽고 질문에 답하세요.\n\n문서: {context}\n\n질문: {question}"
-
-                        # 챗 형식으로 변환
-                        chat = [
-                            {"role": "system", "content": "당신은 도움이 되는 AI 어시스턴트입니다."},
-                            {"role": "user", "content": instruction},
-                            {"role": "assistant", "content": answer_text}
-                        ]
-
-                        # 템플릿 적용
-                        full_text = tokenizer.apply_chat_template(chat, tokenize=False)
-                        records.append({"text": full_text})
-                        count += 1
-
-                        if count % 5000 == 0:
-                            print(f"KorQuAD 데이터 {count}개 처리 완료...")
-
-            except Exception as e:
-                errors += 1
-                if errors % 1000 == 0:
-                    print(f"총 {errors}개 샘플 처리 중 오류 발생")
-                continue
-
-        return records
+    # 샘플 확인
+    print("\nKorQuAD V2 구조 확인:")
+    sample = korquad_v2["train"][0]
+    print(f"샘플 키: {list(sample.keys())}")
+    print(f"답변 구조: {sample['answer'].keys() if isinstance(sample.get('answer'), dict) else 'Not a dict'}")
 
 
-    print("\nKorQuAD V2 데이터 추출 중...")
-    qa_records = extract_korquad_v2(korquad_v2["train"])
-    print(f"추출된 KorQuAD 데이터: {len(qa_records)}개")
+    # 정확한 구조에 맞게 변환 함수 수정
+    def process_korquad_v2(example):
+        try:
+            # 필수 필드 확인
+            if "context" not in example or "question" not in example or "answer" not in example:
+                return None
 
-    # 데이터셋 생성
-    if qa_records:
-        korquad_formatted = Dataset.from_list(qa_records)
-        print(f"KorQuAD 형식 변환 완료: {len(korquad_formatted)} 샘플")
+            context = example["context"]
+            question = example["question"]
 
-        # 데이터셋 병합
-        print("\nKoCommercial과 KorQuAD 데이터셋 병합 중...")
-        combined_dataset = concatenate_datasets([ko_commercial_formatted, korquad_formatted])
-        print(f"병합된 데이터셋 크기: {len(combined_dataset)} 샘플")
-    else:
-        print("KorQuAD에서 유효한 샘플을 추출할 수 없어 KoCommercial만 사용합니다.")
-        combined_dataset = ko_commercial_formatted
+            # 명확한 구조에 따라 answer 필드 처리
+            answer_text = ""
+            if isinstance(example["answer"], dict) and "text" in example["answer"]:
+                answer_text = example["answer"]["text"]
+
+            # 유효한 답변이 있는지 확인
+            if not answer_text or not isinstance(answer_text, str):
+                return None
+
+            # 지시문 형식으로 변환
+            instruction = f"다음 문서를 읽고 질문에 답하세요.\n\n문서: {context}\n\n질문: {question}"
+
+            # 챗 형식으로 변환
+            chat = [
+                {"role": "system", "content": "당신은 도움이 되는 AI 어시스턴트입니다."},
+                {"role": "user", "content": instruction},
+                {"role": "assistant", "content": answer_text}
+            ]
+
+            # 템플릿 적용
+            full_text = tokenizer.apply_chat_template(chat, tokenize=False)
+            return {"text": full_text}
+
+        except Exception as e:
+            return None
+
+
+    print("\nKorQuAD V2 데이터 변환 중...")
+    korquad_processed = korquad_v2["train"].map(
+        process_korquad_v2,
+        remove_columns=korquad_v2["train"].column_names
+    )
+
+    # None 값 필터링
+    korquad_formatted = korquad_processed.filter(lambda example: example["text"] is not None)
+    print(f"변환된 KorQuAD 데이터: {len(korquad_formatted)} 샘플")
+
+    # 데이터셋 병합
+    print("\nKoCommercial과 KorQuAD 데이터셋 병합 중...")
+    combined_dataset = concatenate_datasets([ko_commercial_formatted, korquad_formatted])
+    print(f"병합된 데이터셋 크기: {len(combined_dataset)} 샘플")
 
 except Exception as e:
     print(f"\nKorQuAD V2 처리 중 오류 발생: {str(e)}")
@@ -200,7 +162,7 @@ training_args = TrainingArguments(
     per_device_train_batch_size=4,
     gradient_accumulation_steps=4,
     learning_rate=2e-4,
-    num_train_epochs=1,  # 병합된 데이터셋은 크기가 크므로 1 에포크
+    num_train_epochs=1,
     save_steps=1000,
 
     # TensorBoard 설정
