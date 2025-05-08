@@ -1,5 +1,5 @@
-from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training
-from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, BitsAndBytesConfig
+from peft import LoraConfig, get_peft_model, TaskType
+from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
 from datasets import load_dataset, Dataset
 from transformers import Trainer
 import os
@@ -67,7 +67,7 @@ def prepare_korquad_sample(example):
 
 # 일부 데이터만 사용 (메모리 문제 방지)
 print("KorQuAD 데이터 선택 및 처리 중...")
-sample_count = 20000  # 2만 샘플만 사용
+sample_count = 10000  # 1만 샘플로 더 감소
 korquad_samples = []
 
 for i in range(sample_count):
@@ -116,25 +116,15 @@ del korquad_dataset
 gc.collect()
 torch.cuda.empty_cache()
 
-# 이제 모델 로드 (메모리 확보 후)
+# 이제 모델 로드 (메모리 확보 후) - 4비트 양자화 사용
 print("모델 로드 중...")
 
-# 8비트 양자화 설정
-quantization_config = BitsAndBytesConfig(
-    load_in_8bit=True,
-    llm_int8_threshold=6.0,
-    llm_int8_skip_modules=["embed_tokens"]
-)
-
+# 모델 로드 (4비트 양자화는 피하고 기본 fp16 사용)
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    quantization_config=quantization_config,
-    device_map="auto",
-    torch_dtype=torch.float16
+    torch_dtype=torch.float16,
+    device_map="auto"
 )
-
-# 모델 준비 (중요: 8비트 훈련을 위한 필수 준비)
-model = prepare_model_for_kbit_training(model)
 
 # LoRA 설정
 target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
@@ -149,6 +139,7 @@ lora_config = LoraConfig(
 
 # LoRA 모델 생성
 peft_model = get_peft_model(model, lora_config)
+print("LoRA 모델 생성 완료")
 
 # 학습 가능한 파라미터만 표시
 trainable_params = 0
@@ -161,21 +152,26 @@ print(f"훈련 가능한 파라미터: {trainable_params}")
 print(f"모든 파라미터: {all_param}")
 print(f"훈련 가능한 비율: {100 * trainable_params / all_param:.2f}%")
 
+# 모듈이 올바르게 초기화되었는지 확인
+for name, module in peft_model.named_modules():
+    if "lora" in name.lower():
+        print(f"LoRA 모듈 확인: {name}")
+
 # 학습 설정
 print("학습 설정 구성 중...")
 training_args = TrainingArguments(
     output_dir="./clova-lora-korquad-only",
-    per_device_train_batch_size=4,
-    gradient_accumulation_steps=4,
+    per_device_train_batch_size=1,  # 배치 크기 감소
+    gradient_accumulation_steps=8,  # 그라디언트 누적 증가
     learning_rate=2e-4,
-    num_train_epochs=3,  # 작은 데이터셋이므로 더 많은 에포크
+    max_steps=2000,  # 스텝 기반 학습으로 변경
     save_steps=500,
     logging_dir=tensorboard_dir,
     logging_strategy="steps",
     logging_steps=50,
     report_to=["tensorboard"],
     fp16=True,
-    optim="paged_adamw_8bit",  # 페이징된 8비트 옵티마이저 사용
+    optim="adamw_torch",  # 기본 옵티마이저 사용
     gradient_checkpointing=True,
     save_total_limit=3,
     remove_unused_columns=False,
