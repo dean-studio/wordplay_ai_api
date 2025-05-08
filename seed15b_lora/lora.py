@@ -23,7 +23,7 @@ peft_model = get_peft_model(model, lora_config)
 
 # 데이터셋 로드
 ko_commercial = load_dataset("MarkrAI/KoCommercial-Dataset")
-korquad_v2 = load_dataset("KorQuAD/squad_kor_v2")
+korquad_v2 = load_dataset("KorQuAD/squad_kor_v2", trust_remote_code=True)
 
 
 # KorQuAD 데이터셋 형식 변환 함수
