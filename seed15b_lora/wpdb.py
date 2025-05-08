@@ -228,7 +228,9 @@ training_args = TrainingArguments(
     logging_steps=25,
     save_steps=100,
     eval_steps=50,
-    evaluation_strategy="steps",
+    # 여기를 수정
+    # evaluation_strategy="steps",  # 이렇게 되어 있으면 오류 발생
+    eval_strategy="steps",  # 올바른 매개변수 이름
     save_total_limit=3,
     remove_unused_columns=False,
     report_to=["tensorboard"],
