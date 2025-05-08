@@ -116,4 +116,4 @@ with gr.Blocks(css=css) as demo:
 
 # 서버 시작
 print("Gradio 서버 시작 중...")
-demo.launch(server_port=8283, server_name="0.0.0.0")
+demo.launch(server_port=7860, server_name="0.0.0.0")
