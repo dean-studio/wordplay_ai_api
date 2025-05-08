@@ -49,43 +49,90 @@ peft_model = get_peft_model(model, lora_config)
 # KoCommercial-Dataset 로드 (샘플 수 제한)
 print("KoCommercial-Dataset 로딩 중...")
 ko_commercial = load_dataset("MarkrAI/KoCommercial-Dataset")
-# 메모리 절약을 위해 샘플 수 제한 (필요시 주석 해제)
-# ko_commercial_subset = ko_commercial["train"].select(range(100000))  # 10만 샘플로 제한
-ko_commercial_subset = ko_commercial["train"]
-print(f"선택된 KoCommercial 데이터: {len(ko_commercial_subset)} 샘플")
+
+# 데이터셋 구조 확인
+print("\nKoCommercial 데이터셋 구조 확인:")
+sample = ko_commercial["train"][0]
+print(f"샘플 키: {list(sample.keys())}")
+for key in sample.keys():
+    value = sample[key]
+    print(f"- {key}: {type(value)}")
+    if isinstance(value, list) and value:
+        print(f"  - 첫 항목 타입: {type(value[0])}")
 
 
-# KoCommercial-Dataset 준비
+# KoCommercial-Dataset 준비 (리스트 처리 추가)
 def prepare_ko_commercial(example):
-    # CLOVA 형식으로 변환
-    chat = [
-        {"role": "system", "content": "당신은 도움이 되는 AI 어시스턴트입니다."},
-        {"role": "user",
-         "content": example.get("instruction", "") + (f"\n{example.get('input', '')}" if example.get("input") else "")},
-        {"role": "assistant", "content": example.get("output", "")}
-    ]
-    # 챗 템플릿 적용
-    full_text = tokenizer.apply_chat_template(chat, tokenize=False)
-    return {"text": full_text}
+    try:
+        # 필드 데이터 타입 처리
+        instruction = example.get("instruction", "")
+        if isinstance(instruction, list):
+            instruction = " ".join(str(item) for item in instruction)
+        elif not isinstance(instruction, str):
+            instruction = str(instruction)
+
+        input_text = example.get("input", "")
+        if isinstance(input_text, list):
+            input_text = " ".join(str(item) for item in input_text)
+        elif not isinstance(input_text, str):
+            input_text = str(input_text)
+
+        output = example.get("output", "")
+        if isinstance(output, list):
+            output = " ".join(str(item) for item in output)
+        elif not isinstance(output, str):
+            output = str(output)
+
+        # 프롬프트 생성
+        user_content = instruction
+        if input_text:
+            user_content += f"\n{input_text}"
+
+        # CLOVA 형식으로 변환
+        chat = [
+            {"role": "system", "content": "당신은 도움이 되는 AI 어시스턴트입니다."},
+            {"role": "user", "content": user_content},
+            {"role": "assistant", "content": output}
+        ]
+
+        # 챗 템플릿 적용
+        full_text = tokenizer.apply_chat_template(chat, tokenize=False)
+        return {"text": full_text}
+    except Exception as e:
+        print(f"KoCommercial 샘플 처리 중 오류: {str(e)}")
+        # 오류 발생 시 기본 텍스트 반환
+        return {"text": "오류 발생"}
 
 
 print("\nKoCommercial 데이터 변환 중...")
-ko_commercial_formatted = ko_commercial_subset.map(
-    prepare_ko_commercial,
-    batched=True,
-    batch_size=1000  # 배치 처리로 속도 향상
-)
+ko_commercial_formatted = []
+
+# 안전한 변환을 위해 배치 처리 대신 개별 처리
+for i, example in enumerate(ko_commercial["train"]):
+    try:
+        processed = prepare_ko_commercial(example)
+        if processed["text"] != "오류 발생":
+            ko_commercial_formatted.append(processed)
+    except Exception as e:
+        print(f"샘플 {i} 처리 실패: {str(e)}")
+
+    if i % 10000 == 0 and i > 0:
+        print(f"{i}개 샘플 처리 완료...")
+
+# 리스트를 데이터셋으로 변환
+ko_commercial_formatted = Dataset.from_list(ko_commercial_formatted)
 print(f"변환된 KoCommercial 데이터: {len(ko_commercial_formatted)} 샘플")
 
 # KorQuAD V2 데이터셋 로드 및 처리
 print("\nKorQuAD V2 데이터셋 로드 중...")
 try:
-    # KorQuAD V2 로드 (샘플 수 제한)
+    # KorQuAD V2 로드
     korquad_v2 = load_dataset("KorQuAD/squad_kor_v2", trust_remote_code=True)
-    # 메모리 절약을 위해 샘플 수 제한 (필요시 주석 해제)
-    # korquad_subset = korquad_v2["train"].select(range(50000))  # 5만 샘플로 제한
-    korquad_subset = korquad_v2["train"]
-    print(f"선택된 KorQuAD 데이터: {len(korquad_subset)} 샘플")
+
+    # 샘플 확인
+    print("\nKorQuAD V2 구조 확인:")
+    sample = korquad_v2["train"][0]
+    print(f"샘플 키: {list(sample.keys())}")
 
 
     # 정확한 구조에 맞게 변환 함수 수정
@@ -126,15 +173,22 @@ try:
 
 
     print("\nKorQuAD V2 데이터 변환 중...")
-    korquad_processed = korquad_subset.map(
-        process_korquad_v2,
-        remove_columns=korquad_subset.column_names,
-        batched=True,
-        batch_size=1000  # 배치 처리로 속도 향상
-    )
+    korquad_formatted = []
 
-    # None 값 필터링
-    korquad_formatted = korquad_processed.filter(lambda example: example["text"] is not None)
+    # 안전한 변환을 위해 배치 처리 대신 개별 처리
+    for i, example in enumerate(korquad_v2["train"]):
+        try:
+            processed = process_korquad_v2(example)
+            if processed is not None:
+                korquad_formatted.append(processed)
+        except Exception as e:
+            pass
+
+        if i % 10000 == 0 and i > 0:
+            print(f"{i}개 샘플 처리 완료...")
+
+    # 리스트를 데이터셋으로 변환
+    korquad_formatted = Dataset.from_list(korquad_formatted)
     print(f"변환된 KorQuAD 데이터: {len(korquad_formatted)} 샘플")
 
     # 데이터셋 병합
@@ -170,7 +224,7 @@ print("\n데이터셋 토큰화 중...")
 tokenized_dataset = combined_dataset.map(
     tokenize_function,
     batched=True,
-    batch_size=100,  # 배치 크기 감소로 메모리 사용량 제한
+    batch_size=64,  # 배치 크기 감소로 메모리 사용량 제한
     remove_columns=combined_dataset.column_names
 )
 
