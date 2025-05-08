@@ -1,48 +1,67 @@
 #!/bin/bash
+# 파일명: run_training_with_tensorboard.sh
 
-# 파일명: run.sh
-# 사용법: bash run.sh
-
-# 로그 디렉토리 생성
+# 로그 디렉토리 설정
 TENSORBOARD_LOG_DIR="./tensorboard_logs"
+TRAINING_LOG_DIR="./logs"
 mkdir -p $TENSORBOARD_LOG_DIR
-
-# 학습 로그 디렉토리 생성
-mkdir -p ./logs
+mkdir -p $TRAINING_LOG_DIR
 
 # 현재 시간을 파일명으로 사용
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-LOG_FILE="./logs/training_$TIMESTAMP.log"
+TRAINING_LOG="$TRAINING_LOG_DIR/training_$TIMESTAMP.log"
+TENSORBOARD_LOG="$TRAINING_LOG_DIR/tensorboard_$TIMESTAMP.log"
 
-echo "Starting TensorBoard on port 5000..."
+echo "===================================================="
+echo "CLOVA X 1.5B LoRA 학습 및 TensorBoard 모니터링 시작"
+echo "===================================================="
+echo "시작 시간: $(date)"
+echo "로그 파일: $TRAINING_LOG"
+echo "TensorBoard 로그 디렉토리: $TENSORBOARD_LOG_DIR"
 
-tensorboard --logdir=$TENSORBOARD_LOG_DIR --host=0.0.0.0 --port=5000 > ./logs/tensorboard_$TIMESTAMP.log 2>&1 &
+# TensorBoard 실행 (포트 5000 사용)
+echo "TensorBoard 시작 중..."
+tensorboard --logdir=$TENSORBOARD_LOG_DIR --host=0.0.0.0 --port=5000 > $TENSORBOARD_LOG 2>&1 &
 TENSORBOARD_PID=$!
 
-echo "TensorBoard started with PID: $TENSORBOARD_PID"
-echo "TensorBoard available at http://localhost:5000"
-echo "If running on a remote server, access via: http://SERVER_IP:5000"
+# TensorBoard가 시작되기를 잠시 기다림
+sleep 3
 
-echo "Starting LoRA training..."
-echo "Training logs will be saved to: $LOG_FILE"
-
-# 학습 스크립트 실행 및 로그 저장
-python lora.py > $LOG_FILE 2>&1
-TRAINING_EXIT_CODE=$?
-
-echo "Training finished with exit code: $TRAINING_EXIT_CODE"
-
-# 학습이 끝나도 TensorBoard는 계속 실행
-echo "TensorBoard is still running with PID: $TENSORBOARD_PID"
-echo "To stop TensorBoard manually, run: kill $TENSORBOARD_PID"
-
-# 학습 결과에 따른 메시지 출력
-if [ $TRAINING_EXIT_CODE -eq 0 ]; then
-    echo "Training completed successfully!"
-    echo "Trained model saved to ./clova-lora-final"
+# TensorBoard 실행 확인
+if ps -p $TENSORBOARD_PID > /dev/null; then
+    echo "TensorBoard가 성공적으로 시작되었습니다 (PID: $TENSORBOARD_PID)"
+    echo "접속 URL: http://$(hostname -I | awk '{print $1}'):5000"
 else
-    echo "Training failed with exit code: $TRAINING_EXIT_CODE"
-    echo "Check the logs at $LOG_FILE for details"
+    echo "TensorBoard 시작에 실패했습니다. 로그를 확인하세요: $TENSORBOARD_LOG"
+    exit 1
 fi
 
-echo "To review training logs, run: cat $LOG_FILE"
+# 학습 스크립트 실행
+echo "학습 시작 중..."
+python lora.py > $TRAINING_LOG 2>&1
+
+# 학습 종료 상태 확인
+TRAINING_EXIT_CODE=$?
+if [ $TRAINING_EXIT_CODE -eq 0 ]; then
+    echo "학습이 성공적으로 완료되었습니다!"
+else
+    echo "학습이 오류와 함께 종료되었습니다 (종료 코드: $TRAINING_EXIT_CODE)"
+    echo "로그 파일을 확인하세요: $TRAINING_LOG"
+fi
+
+# TensorBoard 상태 출력
+echo "TensorBoard는 계속 실행 중입니다 (PID: $TENSORBOARD_PID)"
+echo "종료하려면 다음 명령어를 사용하세요: kill $TENSORBOARD_PID"
+
+echo "===================================================="
+echo "실행 요약:"
+echo "- 시작 시간: $(date -d @$(($(date +%s) - $SECONDS)))"
+echo "- 종료 시간: $(date)"
+echo "- 총 소요 시간: $((SECONDS/3600))시간 $(((SECONDS%3600)/60))분 $((SECONDS%60))초"
+echo "- 학습 로그: $TRAINING_LOG"
+echo "- TensorBoard 로그: $TENSORBOARD_LOG"
+echo "- TensorBoard PID: $TENSORBOARD_PID"
+echo "===================================================="
+echo "로그 확인 명령어:"
+echo "tail -f $TRAINING_LOG"
+echo "===================================================="
