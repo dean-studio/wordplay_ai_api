@@ -88,7 +88,12 @@ class QuizGenerator:
 
             # 4. 문제 파싱
             mc_questions = self.parser.parse_multiple_choice(mc_questions_text)
+            print("=== 파싱된 객관식 문제 ===")
+            print(json.dumps(mc_questions, ensure_ascii=False, indent=2))
+
             ox_questions = self.parser.parse_ox_questions(ox_questions_text)
+            print("=== 파싱된 OX 문제 ===")
+            print(json.dumps(ox_questions, ensure_ascii=False, indent=2))
 
             # 5. 파싱된 문제 후처리 - 상대적 시간 표현 변환
             mc_questions = self.post_process_questions(mc_questions, current_date)

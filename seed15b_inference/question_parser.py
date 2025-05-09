@@ -1,5 +1,3 @@
-# question_parser.py 수정
-
 import re
 from typing import List, Dict, Any
 
@@ -154,13 +152,3 @@ class QuestionParser:
                 r"정답.+?\s+-\s+(.+)",  # 정답 X - ...
                 r"정답.+?:(.+)",  # 정답 X: ...
             ]
-
-            for pattern in explanation_patterns:
-                explanation_match = re.search(pattern, block)
-                if explanation_match:
-                    ox_obj["explanation"] = explanation_match.group(1).strip()
-                    break
-
-            ox_questions.append(ox_obj)
-
-        return ox_questions

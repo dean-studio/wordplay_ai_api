@@ -1,4 +1,3 @@
-# gradio_interface.py
 import gradio as gr
 from quiz_generator import QuizGenerator
 import json

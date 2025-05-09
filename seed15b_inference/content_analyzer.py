@@ -1,3 +1,4 @@
+from model_manager import ModelManager
 from datetime import datetime
 
 
@@ -8,7 +9,7 @@ class ContentAnalyzer:
         self.model_manager = model_manager
 
     def analyze(self, content: str) -> str:
-        """콘텐츠 분석 실행 - 날짜 정보 추가"""
+        """콘텐츠 분석 실행"""
         # 현재 날짜 정보 추가
         current_date = datetime.now()
         date_info = f"현재 날짜는 {current_date.year}년 {current_date.month}월 {current_date.day}일입니다."
