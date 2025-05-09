@@ -14,8 +14,8 @@ class QuizGenerator:
         self.model_manager = ModelManager(
             model_id="naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-1.5B",
             lora_paths=[
-                "../seed15b_lora/clova-lora-qa-final",
-                "../seed15b_lora_wp/wpdb-lora-tuned-final"
+                "../seed15b_lora/clova-lora-qa-final"
+                # "../seed15b_lora_wp/wpdb-lora-tuned-final"
             ]
         )
 
