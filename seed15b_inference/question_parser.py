@@ -119,7 +119,7 @@ class QuestionParser:
             print(f"대체 패턴으로 찾은 OX 블록 수: {len(ox_blocks)}")
 
             # 여전히 블록이 없으면 텍스트 전체를 하나의 블록으로 처리
-            if not ox_blocks and "O" in text and "X" in text:
+            if not ox_blocks and ("O" in text or "X" in text):
                 ox_blocks = [text]
                 print("전체 텍스트를 하나의 OX 블록으로 처리합니다.")
 
@@ -138,18 +138,30 @@ class QuestionParser:
             # 질문 찾기
             question_match = re.search(r"질문:\s*([^\n]+)", block)
             if not question_match:
+                # 다른 패턴 시도
+                question_match = re.search(r"question:\s*([^\n]+)", block, re.IGNORECASE)
+
+            if question_match:
+                # "question: " 또는 "질문: " 접두사 제거
+                question_text = question_match.group(1).strip()
+                question_text = re.sub(r'^(question:|질문:)\s*', '', question_text, flags=re.IGNORECASE)
+                ox_obj["question"] = question_text
+            else:
                 # 다른 패턴 시도 (첫 줄이 질문일 수 있음)
                 lines = block.strip().split('\n')
                 if lines and lines[0].strip() and not lines[0].startswith("정답"):
-                    ox_obj["question"] = lines[0].strip()
-            else:
-                ox_obj["question"] = question_match.group(1).strip()
+                    # "question: " 또는 "질문: " 접두사 제거
+                    first_line = lines[0].strip()
+                    first_line = re.sub(r'^(question:|질문:)\s*', '', first_line, flags=re.IGNORECASE)
+                    ox_obj["question"] = first_line
 
             if not ox_obj["question"]:
                 # 질문이 없으면 블럭 전체에서 질문 형태 찾기
                 question_candidates = re.findall(r"([^.\n]+\?|[^.\n]+은 [OXox]입니다)", block)
                 if question_candidates:
-                    ox_obj["question"] = question_candidates[0].strip()
+                    first_candidate = question_candidates[0].strip()
+                    first_candidate = re.sub(r'^(question:|질문:)\s*', '', first_candidate, flags=re.IGNORECASE)
+                    ox_obj["question"] = first_candidate
                 else:
                     # 여전히 질문이 없으면 이 블록은 스킵
                     print("질문을 찾을 수 없어 해당 블록을 건너뜁니다.")
@@ -165,11 +177,12 @@ class QuestionParser:
                 r"정답:\s*([OXYNoxyn])",  # 정답: O 또는 X (일반)
                 r"정답\s*[:：]\s*([OXYNoxyn])",  # 정답 : O (콜론 뒤)
                 r"^\s*([OXYNoxyn])\s*$",  # 줄에 O 또는 X만 있는 경우
+                r"answer:\s*([OXYNoxyn])",  # answer: O 또는 X
             ]
 
             answer_found = False
             for pattern in answer_patterns:
-                answer_match = re.search(pattern, block)
+                answer_match = re.search(pattern, block, re.IGNORECASE)
                 if answer_match:
                     answer_text = answer_match.group(1).upper()
                     # O 또는 Y는 True, X 또는 N은 False로 처리
@@ -193,12 +206,16 @@ class QuestionParser:
                 r"정답.+?:(.+)",  # 정답 X: ...
                 r"이유:\s*([^\n]+)",  # 이유: ...
                 r"해설:\s*([^\n]+)",  # 해설: ...
+                r"explanation:\s*([^\n]+)",  # explanation: ...
             ]
 
             for pattern in explanation_patterns:
-                explanation_match = re.search(pattern, block)
+                explanation_match = re.search(pattern, block, re.IGNORECASE)
                 if explanation_match:
-                    ox_obj["explanation"] = explanation_match.group(1).strip()
+                    explanation_text = explanation_match.group(1).strip()
+                    # "explanation: " 접두사 제거
+                    explanation_text = re.sub(r'^(explanation:|설명:)\s*', '', explanation_text, flags=re.IGNORECASE)
+                    ox_obj["explanation"] = explanation_text
                     break
 
             # 설명을 찾지 못했으면 질문과 정답 외의 텍스트를 설명으로
@@ -207,9 +224,11 @@ class QuestionParser:
                 lines = block.strip().split('\n')
                 explanation_lines = []
                 for line in lines:
-                    if (not line.startswith("질문:") and
-                            not line.startswith("정답:") and
-                            not re.match(r"^\s*[OXYNoxyn]\s*$", line)):
+                    if (not re.search(r'^(질문:|question:)', line, re.IGNORECASE) and
+                            not re.search(r'^(정답:|answer:)', line, re.IGNORECASE) and
+                            not re.match(r'^\s*[OXYNoxyn]\s*$', line)):
+                        # "explanation: " 접두사 제거
+                        line = re.sub(r'^(explanation:|설명:)\s*', '', line, flags=re.IGNORECASE)
                         explanation_lines.append(line.strip())
 
                 if explanation_lines:
@@ -218,6 +237,14 @@ class QuestionParser:
             # 여전히 설명이 없으면 기본 설명 추가
             if not ox_obj["explanation"]:
                 ox_obj["explanation"] = f"해당 문제의 정답은 {'O' if ox_obj['answer'] else 'X'}입니다."
+
+            # 설명에서 참고 자료/링크 부분 제거
+            if "```" in ox_obj["explanation"]:
+                ox_obj["explanation"] = ox_obj["explanation"].split("```")[0].strip()
+
+            # 설명에 있는 answer/explanation 태그 제거
+            ox_obj["explanation"] = re.sub(r'answer:\s*[OXYNoxyn]', '', ox_obj["explanation"], flags=re.IGNORECASE)
+            ox_obj["explanation"] = re.sub(r'explanation:\s*', '', ox_obj["explanation"], flags=re.IGNORECASE)
 
             ox_questions.append(ox_obj)
 

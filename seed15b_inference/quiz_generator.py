@@ -153,6 +153,7 @@ class QuizGenerator:
             # 5. 파싱된 문제 후처리 - 상대적 시간 표현 변환
             mc_questions = self.post_process_questions(mc_questions, current_date)
             ox_questions = self.post_process_questions(ox_questions, current_date)
+            ox_questions = self.clean_ox_questions(ox_questions)  # OX 문제 정리 추가
 
             # 6. 최종 결과 구성
             result = {
@@ -298,3 +299,65 @@ class QuizGenerator:
             fixed_questions.append(fixed_question)
 
         return fixed_questions
+
+
+    def clean_ox_questions(self, ox_questions: List[Dict]) -> List[Dict]:
+        """OX 문제 정리 및 형식 표준화"""
+        cleaned_questions = []
+
+        for question in ox_questions:
+            cleaned_question = question.copy()
+
+            # 질문에서 "question: " 접두사 제거
+            if cleaned_question["question"]:
+                cleaned_question["question"] = re.sub(r'^(question:|질문:)\s*', '',
+                                                      cleaned_question["question"],
+                                                      flags=re.IGNORECASE)
+
+            # 설명에서 "explanation: " 접두사 및 불필요한 정보 제거
+            if cleaned_question["explanation"]:
+                # 참고 자료/링크 부분 제거
+                if "```" in cleaned_question["explanation"]:
+                    cleaned_question["explanation"] = cleaned_question["explanation"].split("```")[0].strip()
+
+                # 설명에 있는 question/answer/explanation 태그 제거
+                cleaned_question["explanation"] = re.sub(r'question:\s*[^\n]+', '',
+                                                         cleaned_question["explanation"],
+                                                         flags=re.IGNORECASE)
+                cleaned_question["explanation"] = re.sub(r'answer:\s*[OXYNoxyn]', '',
+                                                         cleaned_question["explanation"],
+                                                         flags=re.IGNORECASE)
+                cleaned_question["explanation"] = re.sub(r'explanation:\s*', '',
+                                                         cleaned_question["explanation"],
+                                                         flags=re.IGNORECASE)
+
+                # 여러 줄 텍스트를 한 줄로 변환
+                cleaned_question["explanation"] = ' '.join(cleaned_question["explanation"].split())
+
+            # 질문이 객관식 형태인지 확인하고 수정
+            if any(pattern in cleaned_question["question"].lower() for pattern in
+                   ["다음 중", "무엇인가", "고르시오", "선택하시오", "선택하세요", "올바른 것은", "옳은 것은", "맞는 것은"]):
+
+                # 진술문으로 변환 (기본값)
+                statement = f"이 내용은 {'맞습니다' if cleaned_question['answer'] else '틀립니다'}: \"{cleaned_question['question']}\""
+
+                # 설명에서 더 나은 진술문 찾기 시도
+                if cleaned_question["explanation"]:
+                    sentences = re.split(r'[.!?]\s+', cleaned_question["explanation"])
+                    if sentences and len(sentences) > 0:
+                        first_sentence = sentences[0].strip()
+                        if len(first_sentence) > 10:  # 문장이 너무 짧지 않은지 확인
+                            statement = first_sentence
+
+                cleaned_question["question"] = statement
+
+            # 빈 문제 방지
+            if not cleaned_question["question"]:
+                cleaned_question["question"] = "주어진 내용에 관한 OX 문제"
+
+            if not cleaned_question["explanation"]:
+                cleaned_question["explanation"] = f"해당 문제의 정답은 {'O' if cleaned_question['answer'] else 'X'}입니다."
+
+            cleaned_questions.append(cleaned_question)
+
+        return cleaned_questions
