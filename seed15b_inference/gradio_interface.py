@@ -1,9 +1,10 @@
+# gradio_interface.py
 import gradio as gr
 from quiz_generator import QuizGenerator
 import json
 
 
-class ModernGradioInterface:
+class GradioInterface:
     """현대적이고 고급스러운 Gradio UI 인터페이스 클래스"""
 
     def __init__(self, quiz_generator: QuizGenerator):
@@ -464,3 +465,7 @@ class ModernGradioInterface:
         demo = self.build_interface()
         print("Gradio 서버 시작 중...")
         demo.launch(server_port=server_port, server_name=server_name)
+
+
+# 이전 버전과의 호환성을 위해 별칭 생성
+ModernGradioInterface = GradioInterface
