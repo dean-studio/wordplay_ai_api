@@ -142,7 +142,12 @@ class QuizGenerator:
             print(json.dumps(mc_questions, ensure_ascii=False, indent=2))
 
             ox_questions = self.parser.parse_ox_questions(ox_questions_text)
-            print("=== 파싱된 OX 문제 ===")
+            print("=== 파싱된 OX 문제 (원본) ===")
+            print(json.dumps(ox_questions, ensure_ascii=False, indent=2))
+
+            # OX 문제 형식 수정
+            ox_questions = self.fix_ox_questions(ox_questions)
+            print("=== 파싱된 OX 문제 (수정됨) ===")
             print(json.dumps(ox_questions, ensure_ascii=False, indent=2))
 
             # 5. 파싱된 문제 후처리 - 상대적 시간 표현 변환
@@ -245,3 +250,51 @@ class QuizGenerator:
             })
 
         return json.dumps(result, ensure_ascii=False, indent=2)
+
+    def fix_ox_questions(self, ox_questions: List[Dict]) -> List[Dict]:
+        """OX 문제가 객관식 형태로 생성된 경우 참/거짓 형태로 수정"""
+        fixed_questions = []
+
+        for question in ox_questions:
+            fixed_question = question.copy()
+
+            # 객관식 형태의 질문인지 확인
+            if any(pattern in question["question"].lower() for pattern in
+                   ["다음 중", "무엇인가", "고르시오", "선택하시오", "선택하세요", "올바른 것은", "옳은 것은", "맞는 것은"]):
+                # 객관식 형태의 질문을 진술문으로 변환
+                if "정답" in question["explanation"]:
+                    # 설명에서 정답 찾기
+                    answer_parts = question["explanation"].split("정답")
+                    if len(answer_parts) > 1:
+                        answer_text = answer_parts[1].strip()
+                        # 첫 문장 추출
+                        first_sentence = re.search(r'^[^.!?]+[.!?]', answer_text)
+                        if first_sentence:
+                            fixed_question["question"] = first_sentence.group(0).strip()
+
+                # 위 방법으로 추출 실패한 경우
+                if fixed_question["question"] == question["question"]:
+                    # "다음 중"으로 시작하는 질문 수정
+                    if question["question"].startswith("다음 중"):
+                        rest = question["question"].replace("다음 중", "").strip()
+                        if "는" in rest or "은" in rest:
+                            parts = re.split(r'(은|는)', rest, 1)
+                            if len(parts) > 2:
+                                subject = parts[0].strip()
+                                verb = parts[1]  # 은/는
+                                rest = parts[2].strip()
+                                if rest.endswith("?"):
+                                    rest = rest[:-1].strip()
+                                fixed_question["question"] = f"{subject}{verb} {rest}."
+
+                    # 여전히 수정되지 않은 경우 기본 형식으로 변환
+                    if fixed_question["question"] == question["question"]:
+                        # 기본값: 설명에 있는 내용 + 맞다/틀리다
+                        if question["answer"]:
+                            fixed_question["question"] = f"이 내용은 사실이다: '{question['explanation'].split('.')[0]}'."
+                        else:
+                            fixed_question["question"] = f"이 내용은 틀렸다: '{question['explanation'].split('.')[0]}'."
+
+            fixed_questions.append(fixed_question)
+
+        return fixed_questions
