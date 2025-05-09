@@ -67,6 +67,12 @@ class GradioInterface:
                 show_label=True
             )
 
+            # 중요: 버튼 클릭 이벤트 연결
+            submit_btn.click(
+                fn=self.generate_quiz,
+                inputs=[txt, mc_slider, ox_slider],
+                outputs=[output_json]
+            )
 
         return demo
 
