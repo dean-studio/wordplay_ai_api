@@ -67,31 +67,6 @@ class GradioInterface:
                 show_label=True
             )
 
-            # 복사 버튼 추가
-            copy_btn = gr.Button("JSON 복사")
-
-            submit_btn.click(
-                fn=self.generate_quiz,
-                inputs=[txt, mc_slider, ox_slider],
-                outputs=[output_json]
-            )
-
-            # 복사 기능 추가
-            copy_btn.click(
-                fn=None,
-                inputs=None,
-                outputs=None,
-                _js="""
-                () => {
-                    const codeElement = document.querySelector('textarea');
-                    if (codeElement) {
-                        navigator.clipboard.writeText(codeElement.value);
-                        alert('JSON이 클립보드에 복사되었습니다.');
-                    }
-                    return [];
-                }
-                """
-            )
 
         return demo
 
