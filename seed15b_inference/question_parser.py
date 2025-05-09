@@ -51,15 +51,20 @@ class QuestionParser:
 
         return mc_questions
 
+    # question_parser.py
+    # OX 문제 파싱 함수 수정
     @staticmethod
     def parse_ox_questions(text: str) -> List[Dict[str, Any]]:
         """OX 문제 파싱"""
         ox_questions = []
 
         # 각 OX 문제 블록 찾기
-        ox_blocks = re.findall(r"## OX 문제 \d+(.*?)(?=## OX 문제 \d+|$)", text, re.DOTALL)
+        ox_blocks = re.findall(r"## OX 문제 \d+|OX 문제 \d+(.*?)(?=## OX 문제 \d+|OX 문제 \d+|$)", text, re.DOTALL)
 
         for block in ox_blocks:
+            if not block.strip():  # 빈 블록 건너뛰기
+                continue
+
             ox_obj = {
                 "question": "",
                 "answer": True,
@@ -73,10 +78,12 @@ class QuestionParser:
                 # 질문이 없으면 이 블록은 스킵
                 continue
 
-            answer_match = re.search(r"정답:\s*([OXox])", block)
+            # 정답 부분에서 O, X, Y, N 모두 인식하도록 수정
+            answer_match = re.search(r"정답:\s*([OXYNoxyn])", block)
             if answer_match:
                 answer_text = answer_match.group(1).upper()
-                ox_obj["answer"] = True if answer_text == "O" else False
+                # O 또는 Y는 True, X 또는 N은 False로 처리
+                ox_obj["answer"] = True if answer_text in ['O', 'Y'] else False
 
             explanation_match = re.search(r"설명:\s*([^\n]+)", block)
             if explanation_match:
