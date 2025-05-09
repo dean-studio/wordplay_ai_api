@@ -1,4 +1,5 @@
 import json
+import re  # 이 줄 추가
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from model_manager import ModelManager
@@ -15,8 +16,7 @@ class QuizGenerator:
         self.model_manager = ModelManager(
             model_id="naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-1.5B",
             lora_paths=[
-                "../seed15b_lora/clova-lora-qa-final",
-                "../seed15b_lora_wp/wpdb-lora-tuned-final"
+                "../seed15b_lora/clova-lora-qa-final"
             ]
         )
 
@@ -57,7 +57,27 @@ class QuizGenerator:
 
         return processed_questions
 
-    # quiz_generator.py 내의 generate_quiz 메서드 수정
+    def parse_keywords(self, keywords_text: str) -> List[str]:
+        """핵심개념 텍스트를 리스트로 변환"""
+        # 목록 형식으로 되어 있는 경우 (예: "- 항목1, 항목2\n- 항목3")
+        if "-" in keywords_text:
+            items = []
+            for line in keywords_text.split("\n"):
+                line = line.strip()
+                if line.startswith("- "):
+                    line = line[2:].strip()  # "- " 제거
+                    # 쉼표로 구분된 아이템이 있으면 분리
+                    if "," in line:
+                        items.extend([item.strip() for item in line.split(",")])
+                    else:
+                        items.append(line)
+            return items
+        # 쉼표로만 구분된 경우 (예: "항목1, 항목2, 항목3")
+        elif "," in keywords_text:
+            return [item.strip() for item in keywords_text.split(",")]
+        # 단일 항목인 경우
+        else:
+            return [keywords_text.strip()]
 
     def generate_quiz(self, content: str, mc_count: int = 2, ox_count: int = 2) -> str:
         """퀴즈 생성 파이프라인 실행"""
@@ -73,17 +93,28 @@ class QuizGenerator:
 
             # 분석 결과 파싱
             analysis_data = {}
-            category_match = re.search(r"카테고리:\s*(.+?)(?:\n|$)", analysis)
-            keywords_match = re.search(r"핵심개념:\s*(.+?)(?:\n|$)", analysis)
-            timeinfo_match = re.search(r"시기정보:\s*(.+?)(?:\n|$)", analysis)
 
+            # 카테고리 파싱
+            category_match = re.search(r"카테고리:\s*(.+?)(?:\n|$)", analysis)
             if category_match:
                 analysis_data["category"] = category_match.group(1).strip()
-            if keywords_match:
-                keywords = [kw.strip() for kw in keywords_match.group(1).split(',')]
-                analysis_data["keywords"] = keywords
+            else:
+                analysis_data["category"] = "기타"
+
+            # 핵심개념 파싱 - 여러 줄과 목록 형식 지원
+            keywords_section = re.search(r"핵심개념:(.*?)(?:시기정보:|$)", analysis, re.DOTALL)
+            if keywords_section:
+                keywords_text = keywords_section.group(1).strip()
+                analysis_data["keywords"] = self.parse_keywords(keywords_text)
+            else:
+                analysis_data["keywords"] = []
+
+            # 시기정보 파싱
+            timeinfo_match = re.search(r"시기정보:\s*(.+?)(?:\n|$)", analysis)
             if timeinfo_match:
                 analysis_data["time_info"] = timeinfo_match.group(1).strip()
+            else:
+                analysis_data["time_info"] = "확인 불가"
 
             # 날짜 정보 추가
             analysis_data["current_date"] = date_info

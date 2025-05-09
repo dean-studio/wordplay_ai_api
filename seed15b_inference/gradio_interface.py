@@ -49,11 +49,11 @@ class GradioInterface:
 
                 with gr.Column(scale=1):
                     mc_slider = gr.Slider(
-                        minimum=1, maximum=4, value=2, step=1,
+                        minimum=1, maximum=4, value=3, step=1,
                         label="객관식 문제 수"
                     )
                     ox_slider = gr.Slider(
-                        minimum=1, maximum=4, value=2, step=1,
+                        minimum=1, maximum=4, value=3, step=1,
                         label="OX 문제 수"
                     )
                     submit_btn = gr.Button("문제 생성하기")
