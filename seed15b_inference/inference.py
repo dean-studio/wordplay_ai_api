@@ -8,9 +8,11 @@ import os
 base_model_id = "naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-1.5B"
 tokenizer = AutoTokenizer.from_pretrained(base_model_id)
 
-# LoRA 모델 경로 설정 (이 경로를 실제 저장된 LoRA 어댑터 경로로 변경)
-# 예: ../seed15b_lora/clova-lora-qa-final 또는 ../seed15b_lora/clova-lora-korquad-only
-lora_path = "../seed15b_lora/clova-lora-qa-final"  # 실제 경로로 변경하세요
+# LoRA 모델 경로 설정 (여러 LoRA 어댑터 경로를 리스트로 정의)
+lora_paths = [
+    "../seed15b_lora/clova-lora-qa-final",  # 기존 QA LoRA 어댑터
+    "../seed15b_lora_wp/wpdb-lora-tuned-final"  # wp DB LoRA 어댑터
+]
 
 # 모델 로드
 print("기본 모델 로드 중...")
@@ -20,13 +22,14 @@ model = AutoModelForCausalLM.from_pretrained(
     device_map="auto"
 )
 
-# LoRA 어댑터 적용
-if os.path.exists(lora_path):
-    print(f"LoRA 어댑터 로드 중: {lora_path}")
-    model = PeftModel.from_pretrained(model, lora_path)
-    print("LoRA 어댑터가 성공적으로 적용되었습니다.")
-else:
-    print(f"경고: LoRA 어댑터 경로({lora_path})를 찾을 수 없습니다. 기본 모델을 사용합니다.")
+# 여러 LoRA 어댑터 순차적으로 적용
+for lora_path in lora_paths:
+    if os.path.exists(lora_path):
+        print(f"LoRA 어댑터 로드 중: {lora_path}")
+        model = PeftModel.from_pretrained(model, lora_path)
+        print(f"LoRA 어댑터 {os.path.basename(lora_path)}가 성공적으로 적용되었습니다.")
+    else:
+        print(f"경고: LoRA 어댑터 경로({lora_path})를 찾을 수 없습니다.")
 
 # 모델을 평가 모드로 설정
 model.eval()
@@ -41,7 +44,7 @@ def chat_interface(user_input: str) -> str:
     chat = [
         {"role": "tool_list", "content": ""},
         {"role": "system",
-         "content": '- AI 언어모델의 이름은 "CLOVA X" 이며 네이버에서 만들었다.\n- 학습은 LoRA 기법으로 QA 특화 학습이 수행되었다.\n- 오늘은 2025년 05월 08일(목)이다.'},
+         "content": '- AI 언어모델의 이름은 "CLOVA X" 이며 네이버에서 만들었다.\n- 학습은 LoRA 기법으로 QA 특화 학습 및 워드플레이 문제 해설 특화 학습이 수행되었다.\n- 오늘은 2025년 05월 08일(목)이다.'},
         {"role": "user", "content": user_input}
     ]
 
@@ -99,17 +102,18 @@ html, body {
 
 # Gradio 인터페이스 설정
 with gr.Blocks(css=css) as demo:
-    gr.Markdown("## CLOVA X Chat (1.5B) - LoRA QA 특화 모델")
+    gr.Markdown("## CLOVA X Chat (1.5B) - QA + wp 문제 해설 특화 모델")
     chatbot = gr.Chatbot(label="CLOVA X Chat")
     state = gr.State([])
     with gr.Row():
-        txt = gr.Textbox(placeholder="질문을 입력하세요. 특히 QA 성능이 향상되었습니다.", show_label=False)
+        txt = gr.Textbox(placeholder="질문을 입력하세요. QA와 문제 해설 성능이 향상되었습니다.", show_label=False)
 
     # 예제 질문 추가
     gr.Examples([
         ["다음 문서를 읽고 질문에 답하세요. 문서: 대한민국의 수도는 서울이며, 부산은 제2의 도시이다. 서울은 한강이 흐르며 인구가 약 1000만 명이다. 질문: 대한민국의 수도는 어디인가?"],
         ["인공지능에 대해 설명해줄래?"],
-        ["심리학에서 인지부조화란 무엇인가요?"]
+        ["다음 OX 문제에 대한 정확한 설명을 작성하세요. 카테고리: 과학, 난이도: 보통 문제: 지구는 태양계에서 3번째 행성이다. 정답: O"],
+        ["다음 객관식 문제에 대한 정확한 설명을 작성하세요. 카테고리: 수학, 난이도: 중 문제: 삼각형의 내각의 합은 얼마인가? 보기: 1. 90도 2. 180도 3. 270도 4. 360도 정답: 180도"]
     ], txt)
 
     txt.submit(respond, inputs=[txt, state], outputs=[txt, chatbot])
