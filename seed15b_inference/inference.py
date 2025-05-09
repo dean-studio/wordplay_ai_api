@@ -69,7 +69,7 @@ def analyze_content(content):
     with torch.no_grad():
         output_ids = model.generate(
             **inputs,
-            max_length=512,
+            max_length=1024,  # max_length 증가
             temperature=0.3,
             stop_strings=["<|endofturn|>", "<|stop|>"],
             tokenizer=tokenizer
@@ -152,7 +152,7 @@ def generate_multiple_choice_questions(content, analysis, count=2):
 
 
 # 세 번째 단계: 모델에게 OX 문제 생성 요청
-def generate_ox_questions(content, analysis, count=1):
+def generate_ox_questions(content, analysis, count=2):  # 기본값 2로 변경
     system_message = f"""
 - AI 언어모델의 이름은 "CLOVA X" 이며 네이버에서 만들었다.
 - 당신은 교육 콘텐츠 기반 문제 생성 전문가이다.
@@ -161,6 +161,11 @@ def generate_ox_questions(content, analysis, count=1):
 - 출력 형식:
 
 ## OX 문제 1
+질문: [문제 내용]
+정답: [O 또는 X]
+설명: [왜 O 또는 X인지 설명]
+
+## OX 문제 2
 질문: [문제 내용]
 정답: [O 또는 X]
 설명: [왜 O 또는 X인지 설명]
@@ -184,7 +189,7 @@ def generate_ox_questions(content, analysis, count=1):
     with torch.no_grad():
         output_ids = model.generate(
             **inputs,
-            max_length=1024,
+            max_length=1536,  # max_length 증가
             temperature=0.7,
             top_p=0.9,
             repetition_penalty=1.2,
@@ -284,7 +289,7 @@ def parse_ox_questions(text):
 
 
 # 통합 파이프라인
-def generate_quiz(content, mc_count=2, ox_count=1):
+def generate_quiz(content, mc_count=2, ox_count=2):  # 기본값 업데이트
     try:
         # 1. 내용 분석
         analysis = analyze_content(content)
@@ -382,9 +387,16 @@ def generate_quiz(content, mc_count=2, ox_count=1):
             },
             {
                 "ox_quiz": {
-                    "question": "OX 퀴즈 질문",
+                    "question": "OX 퀴즈 질문 1",
                     "answer": True,
                     "explanation": "정답은 O입니다. 이유: 시스템 오류로 기본 응답이 생성되었습니다."
+                }
+            },
+            {
+                "ox_quiz": {
+                    "question": "OX 퀴즈 질문 2",
+                    "answer": False,
+                    "explanation": "정답은 X입니다. 이유: 시스템 오류로 기본 응답이 생성되었습니다."
                 }
             }
         ], ensure_ascii=False, indent=2)
@@ -426,7 +438,7 @@ with gr.Blocks(css=css) as demo:
         with gr.Column(scale=1):
             with gr.Row():
                 mc_slider = gr.Slider(minimum=1, maximum=2, value=2, step=1, label="객관식 문제 수")
-                ox_slider = gr.Slider(minimum=1, maximum=1, value=1, step=1, label="OX 문제 수")
+                ox_slider = gr.Slider(minimum=1, maximum=2, value=2, step=1, label="OX 문제 수")  # 기본값 2로 변경, 최대값도 2로 변경
             submit_btn = gr.Button("문제 생성하기")
 
     output_json = gr.Code(language="json", label="생성된 JSON 문제")
