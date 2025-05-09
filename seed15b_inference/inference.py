@@ -5,7 +5,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
 import gradio as gr
 import os
-import random
 
 # 원본 모델 및 토크나이저 로드
 base_model_id = "naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-1.5B"
@@ -38,44 +37,19 @@ model.eval()
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"사용 장치: {device}")
 
-# 카테고리 매핑 (내용 분석에 따라 자동 선택)
-CATEGORIES = {
-    "경제": [101, "경제", "경제 개념"],
-    "과학": [201, "과학", "자연과학"],
-    "사회": [301, "사회", "사회학"],
-    "국어": [401, "국어", "언어"],
-    "수학": [501, "수학", "수리"],
-    "역사": [601, "역사", "한국사"],
-    "영어": [701, "영어", "외국어"],
-    "기타": [901, "기타", "일반상식"]
-}
 
-# 학년 매핑
-GRADE_LEVELS = [
-    "초등 1학년", "초등 2학년", "초등 3학년", "초등 4학년", "초등 5학년", "초등 6학년",
-    "중등 1학년", "중등 2학년", "중등 3학년",
-    "고등 1학년", "고등 2학년", "고등 3학년"
-]
-
-
-# 첫 단계: 모델에게 교육 내용 분석 요청 (카테고리 및 핵심 개념 추출)
+# 첫 단계: 간단한 내용 분석 요청 (카테고리 파악)
 def analyze_content(content):
     system_message = """
 - AI 언어모델의 이름은 "CLOVA X" 이며 네이버에서 만들었다.
 - 당신은 교육 콘텐츠 분석 전문가이다.
 - 제공된 텍스트를 분석하여 다음 정보를 정확히 추출하라:
   1. 교과 카테고리 (경제, 과학, 사회, 국어, 수학, 역사, 영어, 기타 중 하나)
-  2. 적절한 학년 수준 (초등 1-6학년, 중등 1-3학년, 고등 1-3학년 중 하나)
-  3. 난이도 (1-쉬움, 2-보통, 3-어려움)
-  4. 해당 내용의 핵심 개념 키워드 5개 (쉼표로 구분)
-  5. 내용 요약 (1-2문장)
+  2. 핵심 개념 3개 (쉼표로 구분)
 
 - 출력 형식:
 카테고리: [카테고리명]
-학년: [학년 수준]
-난이도: [1-3]
-핵심개념: [키워드1], [키워드2], [키워드3], [키워드4], [키워드5]
-요약: [내용 요약]
+핵심개념: [키워드1], [키워드2], [키워드3]
 """
 
     chat = [
@@ -95,7 +69,7 @@ def analyze_content(content):
     with torch.no_grad():
         output_ids = model.generate(
             **inputs,
-            max_length=1024,
+            max_length=512,
             temperature=0.3,
             stop_strings=["<|endofturn|>", "<|stop|>"],
             tokenizer=tokenizer
@@ -111,17 +85,18 @@ def analyze_content(content):
         return full_output
 
 
-# 두 번째 단계: 모델에게 문제 생성 요청 (구조화되지 않은 형태)
-def generate_questions(content, analysis):
-    system_message = """
+# 두 번째 단계: 모델에게 객관식 문제 생성 요청
+def generate_multiple_choice_questions(content, analysis, count=2):
+    system_message = f"""
 - AI 언어모델의 이름은 "CLOVA X" 이며 네이버에서 만들었다.
 - 당신은 교육 콘텐츠 기반 문제 생성 전문가이다.
-- 주어진 교육 콘텐츠를 기반으로 객관식 문제 1개와 OX 문제 1개를 생성하라.
-- 객관식 문제는 반드시 4개의 선택지를 포함해야 하며, 정답과 오답이 명확해야 한다.
+- 주어진 교육 콘텐츠를 기반으로 객관식 문제 {count}개를 생성하라.
+- 각 객관식 문제는 반드시 4개의 선택지를 포함해야 하며, 정답과 오답이 명확해야 한다.
 - 모든 문제는 제공된 내용에만 기반해야 하며, 외부 지식을 요구하지 않아야 한다.
+- 문제는 서로 중복되지 않고 다양한 내용을 다루어야 한다.
 - 출력 형식:
 
-## 객관식 문제
+## 객관식 문제 1
 질문: [문제 내용]
 보기1: [선택지1]
 보기2: [선택지2]
@@ -130,16 +105,21 @@ def generate_questions(content, analysis):
 정답: [정답 번호]
 설명: [왜 이 답이 맞는지 설명]
 
-## OX 문제
+## 객관식 문제 2
 질문: [문제 내용]
-정답: [O 또는 X]
-설명: [왜 O 또는 X인지 설명]
+보기1: [선택지1]
+보기2: [선택지2]
+보기3: [선택지3]
+보기4: [선택지4]
+정답: [정답 번호]
+설명: [왜 이 답이 맞는지 설명]
 """
 
     chat = [
         {"role": "tool_list", "content": ""},
         {"role": "system", "content": system_message},
-        {"role": "user", "content": f"다음 교육 콘텐츠와 분석 결과를 바탕으로 문제를 생성해주세요:\n\n# 교육 콘텐츠\n{content}\n\n# 분석 결과\n{analysis}"}
+        {"role": "user",
+         "content": f"다음 교육 콘텐츠와 분석 결과를 바탕으로 객관식 문제를 생성해주세요:\n\n# 교육 콘텐츠\n{content}\n\n# 분석 결과\n{analysis}"}
     ]
 
     inputs = tokenizer.apply_chat_template(
@@ -171,187 +151,243 @@ def generate_questions(content, analysis):
         return full_output
 
 
-# 세 번째 단계: 생성된 문제를 JSON으로 구조화
-def parse_questions_to_json(questions, analysis, content):
-    result = {}
+# 세 번째 단계: 모델에게 OX 문제 생성 요청
+def generate_ox_questions(content, analysis, count=1):
+    system_message = f"""
+- AI 언어모델의 이름은 "CLOVA X" 이며 네이버에서 만들었다.
+- 당신은 교육 콘텐츠 기반 문제 생성 전문가이다.
+- 주어진 교육 콘텐츠를 기반으로 OX 문제 {count}개를 생성하라.
+- 모든 문제는 제공된 내용에만 기반해야 하며, 외부 지식을 요구하지 않아야 한다.
+- 출력 형식:
 
-    # 분석 정보 파싱
-    category = "기타"
-    grade_level = "초등 5학년"
-    difficulty = 2
-    summary = ""
+## OX 문제 1
+질문: [문제 내용]
+정답: [O 또는 X]
+설명: [왜 O 또는 X인지 설명]
+"""
 
-    category_match = re.search(r"카테고리:\s*(\S+)", analysis)
-    grade_match = re.search(r"학년:\s*([^\n]+)", analysis)
-    difficulty_match = re.search(r"난이도:\s*(\d)", analysis)
-    summary_match = re.search(r"요약:\s*([^\n]+)", analysis)
+    chat = [
+        {"role": "tool_list", "content": ""},
+        {"role": "system", "content": system_message},
+        {"role": "user",
+         "content": f"다음 교육 콘텐츠와 분석 결과를 바탕으로 OX 문제를 생성해주세요:\n\n# 교육 콘텐츠\n{content}\n\n# 분석 결과\n{analysis}"}
+    ]
 
-    if category_match:
-        category = category_match.group(1)
-    if grade_match:
-        grade_level = grade_match.group(1).strip()
-    if difficulty_match:
-        difficulty = int(difficulty_match.group(1))
-    if summary_match:
-        summary = summary_match.group(1).strip()
+    inputs = tokenizer.apply_chat_template(
+        chat,
+        add_generation_prompt=True,
+        return_dict=True,
+        return_tensors="pt"
+    )
+    inputs = {k: v.to(device) for k, v in inputs.items()}
 
-    # 카테고리 매핑에서 인덱스 찾기
-    category_idx = 901  # 기본값
-    for key, value in CATEGORIES.items():
-        if key in category or category in key:
-            category_idx = value[0]
-            category = value[1]
-            break
+    with torch.no_grad():
+        output_ids = model.generate(
+            **inputs,
+            max_length=1024,
+            temperature=0.7,
+            top_p=0.9,
+            repetition_penalty=1.2,
+            stop_strings=["<|endofturn|>", "<|stop|>"],
+            tokenizer=tokenizer
+        )
 
-    # 기본 결과 구조 설정
-    result = {
-        "question": f"{category} - {summary}",
-        "category": category,
-        "category_idx": category_idx,
-        "grade_level": grade_level if grade_level in GRADE_LEVELS else "초등 5학년",
-        "difficulty": difficulty if 1 <= difficulty <= 3 else 2,
-        "multiple_choice": {
+    output = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+    full_output = "\n".join(output)
+
+    if "assistant" in full_output:
+        questions = full_output.split("assistant", 1)[1].strip()
+        return questions
+    else:
+        return full_output
+
+
+# 객관식 문제 파싱 함수
+def parse_multiple_choice(text):
+    mc_questions = []
+
+    # 각 객관식 문제 블록 찾기
+    mc_blocks = re.findall(r"## 객관식 문제 \d+(.*?)(?=## 객관식 문제 \d+|## OX|$)", text, re.DOTALL)
+
+    for block in mc_blocks:
+        mc_obj = {
             "question": "",
             "options": [
-                {"id": 1, "value": ""},
-                {"id": 2, "value": ""},
-                {"id": 3, "value": ""},
-                {"id": 4, "value": ""}
+                {"id": 1, "value": "보기1"},
+                {"id": 2, "value": "보기2"},
+                {"id": 3, "value": "보기3"},
+                {"id": 4, "value": "보기4"}
             ],
             "answer": 1,
             "explanation": ""
-        },
-        "ox_quiz": {
-            "question": "",
-            "answer": True,
-            "explanation": ""
-        },
-        "reference_links": {
-            "priority_1": f"https://namu.wiki/w/{category}",
-            "priority_2": f"https://blog.naver.com/search/blog.naver?query={category}",
-            "priority_3": f"https://ko.wikipedia.org/wiki/{category}"
         }
-    }
 
-    # 객관식 문제 파싱
-    mc_section = re.search(r"## 객관식 문제(.*?)(?=## OX 문제|\Z)", questions, re.DOTALL)
-    if mc_section:
-        mc_text = mc_section.group(1)
-
-        question_match = re.search(r"질문:\s*([^\n]+)", mc_text)
+        question_match = re.search(r"질문:\s*([^\n]+)", block)
         if question_match:
-            result["multiple_choice"]["question"] = question_match.group(1).strip()
+            mc_obj["question"] = question_match.group(1).strip()
+        else:
+            # 질문이 없으면 이 블록은 스킵
+            continue
 
-        options = re.findall(r"보기(\d):\s*([^\n]+)", mc_text)
+        options = re.findall(r"보기(\d):\s*([^\n]+)", block)
         for opt in options:
             idx = int(opt[0])
             if 1 <= idx <= 4:
-                result["multiple_choice"]["options"][idx - 1]["value"] = opt[1].strip()
+                mc_obj["options"][idx - 1]["value"] = opt[1].strip()
 
-        answer_match = re.search(r"정답:\s*(\d)", mc_text)
+        answer_match = re.search(r"정답:\s*(\d)", block)
         if answer_match:
-            result["multiple_choice"]["answer"] = int(answer_match.group(1))
+            mc_obj["answer"] = int(answer_match.group(1))
 
-        explanation_match = re.search(r"설명:\s*([^\n]+)", mc_text)
+        explanation_match = re.search(r"설명:\s*([^\n]+)", block)
         if explanation_match:
-            result["multiple_choice"]["explanation"] = explanation_match.group(1).strip()
+            mc_obj["explanation"] = explanation_match.group(1).strip()
 
-    # OX 문제 파싱
-    ox_section = re.search(r"## OX 문제(.*?)(?=##|\Z)", questions, re.DOTALL)
-    if ox_section:
-        ox_text = ox_section.group(1)
+        mc_questions.append(mc_obj)
 
-        question_match = re.search(r"질문:\s*([^\n]+)", ox_text)
+    return mc_questions
+
+
+# OX 문제 파싱 함수
+def parse_ox_questions(text):
+    ox_questions = []
+
+    # 각 OX 문제 블록 찾기
+    ox_blocks = re.findall(r"## OX 문제 \d+(.*?)(?=## OX 문제 \d+|$)", text, re.DOTALL)
+
+    for block in ox_blocks:
+        ox_obj = {
+            "question": "",
+            "answer": True,
+            "explanation": ""
+        }
+
+        question_match = re.search(r"질문:\s*([^\n]+)", block)
         if question_match:
-            result["ox_quiz"]["question"] = question_match.group(1).strip()
+            ox_obj["question"] = question_match.group(1).strip()
+        else:
+            # 질문이 없으면 이 블록은 스킵
+            continue
 
-        answer_match = re.search(r"정답:\s*([OXox])", ox_text)
+        answer_match = re.search(r"정답:\s*([OXox])", block)
         if answer_match:
             answer_text = answer_match.group(1).upper()
-            result["ox_quiz"]["answer"] = True if answer_text == "O" else False
+            ox_obj["answer"] = True if answer_text == "O" else False
 
-        explanation_match = re.search(r"설명:\s*([^\n]+)", ox_text)
+        explanation_match = re.search(r"설명:\s*([^\n]+)", block)
         if explanation_match:
-            result["ox_quiz"]["explanation"] = explanation_match.group(1).strip()
+            ox_obj["explanation"] = explanation_match.group(1).strip()
 
-    # 오류 검사 및 수정 (필수 필드가 비어있는 경우)
-    if not result["multiple_choice"]["question"]:
-        result["multiple_choice"]["question"] = f"{category}에 관한 문제"
+        ox_questions.append(ox_obj)
 
-    if not result["ox_quiz"]["question"]:
-        result["ox_quiz"]["question"] = f"{category}에 관한 진위형 문제"
-
-    # 빈 옵션 처리
-    for i in range(4):
-        if not result["multiple_choice"]["options"][i]["value"]:
-            result["multiple_choice"]["options"][i]["value"] = f"선택지 {i + 1}"
-
-    return result
+    return ox_questions
 
 
-# 전체 파이프라인 연결
-def generate_quiz(content):
+# 통합 파이프라인
+def generate_quiz(content, mc_count=2, ox_count=1):
     try:
         # 1. 내용 분석
         analysis = analyze_content(content)
         print("=== 분석 결과 ===")
         print(analysis)
 
-        # 2. 문제 생성
-        questions = generate_questions(content, analysis)
-        print("=== 생성된 문제 ===")
-        print(questions)
+        # 2. 객관식 문제 생성
+        mc_questions_text = generate_multiple_choice_questions(content, analysis, mc_count)
+        print("=== 생성된 객관식 문제 ===")
+        print(mc_questions_text)
 
-        # 3. JSON 파싱 및 구조화
-        result_json = parse_questions_to_json(questions, analysis, content)
-        print("=== 구조화된 JSON ===")
-        print(json.dumps(result_json, ensure_ascii=False, indent=2))
+        # 3. OX 문제 생성
+        ox_questions_text = generate_ox_questions(content, analysis, ox_count)
+        print("=== 생성된 OX 문제 ===")
+        print(ox_questions_text)
 
-        # 4. 최종 결과 반환
-        return json.dumps(result_json, ensure_ascii=False, indent=2)
+        # 4. 문제 파싱
+        mc_questions = parse_multiple_choice(mc_questions_text)
+        ox_questions = parse_ox_questions(ox_questions_text)
+
+        # 5. 최종 결과 구성
+        result = []
+
+        # 객관식 문제 추가 (최대 허용 개수까지)
+        for i, mc in enumerate(mc_questions[:mc_count]):
+            result.append({
+                "multiple_choice": mc
+            })
+
+        # 객관식 문제가 없거나 부족하면 기본 문제 추가
+        while len(result) < mc_count:
+            result.append({
+                "multiple_choice": {
+                    "question": "객관식 문제",
+                    "options": [
+                        {"id": 1, "value": "보기1"},
+                        {"id": 2, "value": "보기2"},
+                        {"id": 3, "value": "보기3"},
+                        {"id": 4, "value": "보기4"}
+                    ],
+                    "answer": 1,
+                    "explanation": "정답은 '보기1'입니다. 이유: 기본 설명입니다."
+                }
+            })
+
+        # OX 문제 추가 (최대 허용 개수까지)
+        for i, ox in enumerate(ox_questions[:ox_count]):
+            result.append({
+                "ox_quiz": ox
+            })
+
+        # OX 문제가 없거나 부족하면 기본 문제 추가
+        while len(result) - mc_count < ox_count:
+            result.append({
+                "ox_quiz": {
+                    "question": "OX 퀴즈 질문",
+                    "answer": True,
+                    "explanation": "정답은 O입니다. 이유: 기본 설명입니다."
+                }
+            })
+
+        print("=== 최종 JSON ===")
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+
+        return json.dumps(result, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"오류 발생: {str(e)}")
         # 오류 발생 시 기본 JSON 반환
-        return json.dumps({
-            "error": str(e),
-            "question": "오류가 발생했습니다",
-            "category": "기타",
-            "category_idx": 999,
-            "grade_level": "초등 5학년",
-            "difficulty": 2,
-            "multiple_choice": {
-                "question": "오류로 인해 문제를 생성할 수 없습니다",
-                "options": [
-                    {"id": 1, "value": "오류 발생"},
-                    {"id": 2, "value": "다시 시도해주세요"},
-                    {"id": 3, "value": "입력 내용을 확인해주세요"},
-                    {"id": 4, "value": "더 짧은 내용으로 시도해보세요"}
-                ],
-                "answer": 1,
-                "explanation": "시스템 오류가 발생했습니다. 다시 시도해주세요."
+        return json.dumps([
+            {
+                "multiple_choice": {
+                    "question": "객관식 문제 1",
+                    "options": [
+                        {"id": 1, "value": "보기1"},
+                        {"id": 2, "value": "보기2"},
+                        {"id": 3, "value": "보기3"},
+                        {"id": 4, "value": "보기4"}
+                    ],
+                    "answer": 1,
+                    "explanation": "정답은 '보기1'입니다. 이유: 시스템 오류로 기본 응답이 생성되었습니다."
+                }
             },
-            "ox_quiz": {
-                "question": "이 결과는 오류 때문에 생성된 것입니다",
-                "answer": True,
-                "explanation": "오류가 발생하여 기본 응답을 반환했습니다."
+            {
+                "multiple_choice": {
+                    "question": "객관식 문제 2",
+                    "options": [
+                        {"id": 1, "value": "보기1"},
+                        {"id": 2, "value": "보기2"},
+                        {"id": 3, "value": "보기3"},
+                        {"id": 4, "value": "보기4"}
+                    ],
+                    "answer": 1,
+                    "explanation": "정답은 '보기1'입니다. 이유: 시스템 오류로 기본 응답이 생성되었습니다."
+                }
             },
-            "reference_links": {
-                "priority_1": "",
-                "priority_2": "",
-                "priority_3": ""
+            {
+                "ox_quiz": {
+                    "question": "OX 퀴즈 질문",
+                    "answer": True,
+                    "explanation": "정답은 O입니다. 이유: 시스템 오류로 기본 응답이 생성되었습니다."
+                }
             }
-        }, ensure_ascii=False, indent=2)
-
-
-# 최종 채팅 인터페이스 구현
-def chat_interface(user_input):
-    return generate_quiz(user_input)
-
-
-def respond(message, chat_history):
-    response = chat_interface(message)
-    chat_history.append((message, response))
-    return "", chat_history
+        ], ensure_ascii=False, indent=2)
 
 
 # Gradio UI 설정
@@ -378,7 +414,7 @@ pre {
 """
 
 with gr.Blocks(css=css) as demo:
-    gr.Markdown("## 교육 콘텐츠 문제 생성기 (하이브리드 방식)")
+    gr.Markdown("## 교육 콘텐츠 문제 생성기 (하이브리드 접근법)")
 
     with gr.Row():
         with gr.Column(scale=6):
@@ -388,14 +424,16 @@ with gr.Blocks(css=css) as demo:
                 lines=10
             )
         with gr.Column(scale=1):
+            with gr.Row():
+                mc_slider = gr.Slider(minimum=1, maximum=2, value=2, step=1, label="객관식 문제 수")
+                ox_slider = gr.Slider(minimum=1, maximum=1, value=1, step=1, label="OX 문제 수")
             submit_btn = gr.Button("문제 생성하기")
 
     output_json = gr.Code(language="json", label="생성된 JSON 문제")
 
-
     submit_btn.click(
-        fn=lambda x: chat_interface(x),
-        inputs=[txt],
+        fn=lambda x, mc, ox: generate_quiz(x, int(mc), int(ox)),
+        inputs=[txt, mc_slider, ox_slider],
         outputs=[output_json]
     )
 
