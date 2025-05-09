@@ -145,15 +145,15 @@ class QuizGenerator:
             print("=== 파싱된 OX 문제 (원본) ===")
             print(json.dumps(ox_questions, ensure_ascii=False, indent=2))
 
-            # OX 문제 형식 수정
-            ox_questions = self.fix_ox_questions(ox_questions)
-            print("=== 파싱된 OX 문제 (수정됨) ===")
-            print(json.dumps(ox_questions, ensure_ascii=False, indent=2))
+            # # OX 문제 형식 수정
+            # ox_questions = self.fix_ox_questions(ox_questions)
+            # print("=== 파싱된 OX 문제 (수정됨) ===")
+            # print(json.dumps(ox_questions, ensure_ascii=False, indent=2))
 
             # 5. 파싱된 문제 후처리 - 상대적 시간 표현 변환
             mc_questions = self.post_process_questions(mc_questions, current_date)
             ox_questions = self.post_process_questions(ox_questions, current_date)
-            ox_questions = self.clean_ox_questions(ox_questions)  # OX 문제 정리 추가
+            # ox_questions = self.clean_ox_questions(ox_questions)  # OX 문제 정리 추가
 
             # 6. 최종 결과 구성
             result = {
