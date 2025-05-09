@@ -41,9 +41,9 @@ class ModelManager:
         print(f"사용 장치: {self.device}")
 
     def generate_text(self, system_message: str, user_message: str,
-                      max_length: int = 2048, temperature: float = 0.7,
+                      max_new_tokens: int = 1024, temperature: float = 0.7,
                       top_p: float = 0.9, repetition_penalty: float = 1.2) -> str:
-        """텍스트 생성 기본 함수"""
+        """텍스트 생성 기본 함수 - max_length 대신 max_new_tokens 사용"""
         chat = [
             {"role": "tool_list", "content": ""},
             {"role": "system", "content": system_message},
@@ -61,7 +61,7 @@ class ModelManager:
         with torch.no_grad():
             output_ids = self.model.generate(
                 **inputs,
-                max_length=max_length,
+                max_new_tokens=max_new_tokens,  # max_length 대신 max_new_tokens 사용
                 temperature=temperature,
                 top_p=top_p,
                 repetition_penalty=repetition_penalty,

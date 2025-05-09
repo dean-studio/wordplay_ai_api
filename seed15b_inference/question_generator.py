@@ -42,7 +42,7 @@ class QuestionGenerator:
         return self.model_manager.generate_text(
             system_message=system_message,
             user_message=user_message,
-            max_length=2048,
+            max_new_tokens=2048,
             temperature=0.7
         )
 
@@ -71,6 +71,6 @@ class QuestionGenerator:
         return self.model_manager.generate_text(
             system_message=system_message,
             user_message=user_message,
-            max_length=1536,
+            max_new_tokens=1536,
             temperature=0.7
         )

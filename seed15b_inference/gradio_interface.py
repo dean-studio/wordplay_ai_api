@@ -15,13 +15,22 @@ class GradioInterface:
             margin: 0 auto;
             padding: 20px;
         }
+        pre {
+            white-space: pre-wrap;
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            overflow-x: auto;
+        }
         """
 
     def generate_quiz(self, content, mc_count, ox_count):
         """퀴즈 생성 함수"""
         try:
             result = self.quiz_generator.generate_quiz(content, int(mc_count), int(ox_count))
-            return result
+            # 형식화된 JSON을 반환하여 보기 좋게 표시
+            return json.dumps(json.loads(result), ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"오류 발생: {str(e)}")
             return f"오류 발생: {str(e)}"
@@ -50,12 +59,38 @@ class GradioInterface:
                     )
                     submit_btn = gr.Button("문제 생성하기")
 
-            output_json = gr.JSON(label="생성된 JSON 문제")
+            # JSON 대신 Code 컴포넌트 사용 - 전체 내용이 바로 표시됨
+            output_json = gr.Code(
+                language="json",
+                label="생성된 JSON 문제",
+                lines=20,  # 충분한 줄 수 지정
+                show_label=True
+            )
+
+            # 복사 버튼 추가
+            copy_btn = gr.Button("JSON 복사")
 
             submit_btn.click(
                 fn=self.generate_quiz,
                 inputs=[txt, mc_slider, ox_slider],
                 outputs=[output_json]
+            )
+
+            # 복사 기능 추가
+            copy_btn.click(
+                fn=None,
+                inputs=None,
+                outputs=None,
+                _js="""
+                () => {
+                    const codeElement = document.querySelector('textarea');
+                    if (codeElement) {
+                        navigator.clipboard.writeText(codeElement.value);
+                        alert('JSON이 클립보드에 복사되었습니다.');
+                    }
+                    return [];
+                }
+                """
             )
 
         return demo

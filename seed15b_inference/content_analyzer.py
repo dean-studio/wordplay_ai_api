@@ -25,6 +25,6 @@ class ContentAnalyzer:
         return self.model_manager.generate_text(
             system_message=system_message,
             user_message=user_message,
-            max_length=1024,
+            max_new_tokens=1024,
             temperature=0.3
         )
