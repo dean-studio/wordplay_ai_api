@@ -69,16 +69,17 @@ class GradioInterface:
         }
 
         /* 카드 스타일 */
-        .gradio-container .gr-box, .gradio-container .gr-form {
+        .gradio-container .card, .header-section, .input-card, .settings-card, .result-section, .info-section, .footer-section {
             border: none !important;
             border-radius: 12px !important;
             box-shadow: 0 6px 16px var(--shadow-color) !important;
             padding: 1.5rem !important;
             background-color: var(--card-color) !important;
             transition: transform 0.2s, box-shadow 0.2s;
+            margin-bottom: 1.5rem;
         }
 
-        .gradio-container .gr-box:hover, .gradio-container .gr-form:hover {
+        .gradio-container .card:hover {
             transform: translateY(-2px);
             box-shadow: 0 8px 24px var(--shadow-color) !important;
         }
@@ -99,7 +100,7 @@ class GradioInterface:
         }
 
         /* 버튼 스타일 */
-        .gradio-container button.primary {
+        .gradio-container button.primary, button.secondary-button, button.tool-button {
             background-color: var(--primary-color) !important;
             color: white !important;
             border-radius: 8px !important;
@@ -110,16 +111,37 @@ class GradioInterface:
             transition: background-color 0.3s, transform 0.2s !important;
             text-transform: none !important;
             box-shadow: 0 4px 6px rgba(63, 81, 181, 0.2) !important;
+            margin: 0.5rem 0;
+            cursor: pointer;
         }
 
-        .gradio-container button.primary:hover {
+        .gradio-container button.secondary-button {
+            background-color: white !important;
+            color: var(--primary-color) !important;
+            border: 1px solid var(--primary-color) !important;
+            box-shadow: none !important;
+        }
+
+        .gradio-container button.tool-button {
+            background-color: #f5f5f5 !important;
+            color: var(--text-color) !important;
+            box-shadow: none !important;
+            padding: 8px 16px !important;
+            font-size: 0.9rem !important;
+        }
+
+        .gradio-container button:hover {
             background-color: #303f9f !important;
             transform: translateY(-2px);
             box-shadow: 0 6px 8px rgba(63, 81, 181, 0.3) !important;
         }
 
-        .gradio-container button.primary:active {
-            transform: translateY(0);
+        .gradio-container button.secondary-button:hover {
+            background-color: rgba(63, 81, 181, 0.1) !important;
+        }
+
+        .gradio-container button.tool-button:hover {
+            background-color: #e0e0e0 !important;
         }
 
         /* 슬라이더 스타일 */
@@ -160,16 +182,17 @@ class GradioInterface:
         }
 
         /* 로딩 애니메이션 */
-        .gradio-container .progress-bar {
+        .progress-bar {
             position: relative;
             height: 4px;
             width: 100%;
             border-radius: 2px;
             overflow: hidden;
             background-color: #e0e0e0;
+            margin: 1rem 0;
         }
 
-        .gradio-container .progress-bar::after {
+        .progress-bar::after {
             content: "";
             position: absolute;
             height: 100%;
@@ -279,14 +302,10 @@ class GradioInterface:
 
     def build_interface(self):
         """향상된 Gradio 인터페이스 구성"""
-        with gr.Blocks(css=self.css, theme=gr.themes.Default(
-                primary_hue="indigo",
-                secondary_hue="pink",
-                neutral_hue="gray"
-        )) as demo:
+        with gr.Blocks(css=self.css, theme=gr.themes.Default()) as demo:
             with gr.Column(elem_classes="container-wrapper"):
                 # 헤더 섹션
-                with gr.Box(elem_classes="header-section"):
+                with gr.Group(elem_classes="header-section"):
                     gr.Markdown(
                         """
                         # 📚 교육 콘텐츠 문제 생성기
@@ -301,7 +320,7 @@ class GradioInterface:
                 with gr.Row(elem_classes="main-row"):
                     # 입력 섹션
                     with gr.Column(scale=7):
-                        with gr.Box(elem_classes="input-card"):
+                        with gr.Group(elem_classes="input-card"):
                             gr.Markdown("### 📝 교육 콘텐츠 입력")
 
                             with gr.Tab("텍스트 입력"):
@@ -314,11 +333,11 @@ class GradioInterface:
 
                             with gr.Tab("파일 업로드"):
                                 file_input = gr.File(label="텍스트 파일 업로드 (.txt)")
-                                file_button = gr.Button("파일 내용 불러오기", elem_classes="secondary-button")
+                                file_button = gr.Button("파일 내용 불러오기")
 
                     # 설정 및 제어 섹션
                     with gr.Column(scale=3):
-                        with gr.Box(elem_classes="settings-card"):
+                        with gr.Group(elem_classes="settings-card"):
                             gr.Markdown("### ⚙️ 생성 설정")
 
                             with gr.Group():
@@ -335,11 +354,11 @@ class GradioInterface:
                                 )
 
                             with gr.Group(elem_classes="action-buttons"):
-                                submit_btn = gr.Button("문제 생성하기", elem_classes="primary")
-                                clear_btn = gr.Button("모두 지우기", elem_classes="secondary-button")
+                                submit_btn = gr.Button("문제 생성하기")
+                                clear_btn = gr.Button("모두 지우기")
 
                 # 결과 섹션
-                with gr.Box(elem_classes="result-section", visible=False) as result_container:
+                with gr.Group(visible=False, elem_classes="result-section") as result_container:
                     gr.Markdown("### 🎯 생성된 문제")
 
                     with gr.Row():
@@ -360,11 +379,11 @@ class GradioInterface:
                             )
 
                     with gr.Row(elem_classes="action-row"):
-                        copy_btn = gr.Button("JSON 복사", elem_classes="tool-button")
-                        download_btn = gr.Button("JSON 다운로드", elem_classes="tool-button")
+                        copy_btn = gr.Button("JSON 복사")
+                        download_btn = gr.Button("JSON 다운로드")
 
                 # 하단 정보 섹션
-                with gr.Box(elem_classes="info-section"):
+                with gr.Group(elem_classes="info-section"):
                     gr.Markdown(
                         """
                         ### 📋 사용 가이드
@@ -379,7 +398,7 @@ class GradioInterface:
                     )
 
                 # 푸터 섹션
-                with gr.Box(elem_classes="footer-section"):
+                with gr.Group(elem_classes="footer-section"):
                     gr.Markdown(
                         """
                         #### 교육 콘텐츠 문제 생성기 (v1.0.0) | 하이브리드 AI 접근법 | ©2025
