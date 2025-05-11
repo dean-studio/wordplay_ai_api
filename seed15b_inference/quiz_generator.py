@@ -136,24 +136,22 @@ class QuizGenerator:
             print("=== 생성된 OX 문제 ===")
             print(ox_questions_text)
 
-            # 4. 문제 파싱
-            mc_questions = self.parser.parse_multiple_choice(mc_questions_text)
-            print("=== 파싱된 객관식 문제 ===")
-            print(json.dumps(mc_questions, ensure_ascii=False, indent=2))
-
-            ox_questions = self.parser.parse_ox_questions(ox_questions_text)
-            print("=== 파싱된 OX 문제 (원본) ===")
-            print(json.dumps(ox_questions, ensure_ascii=False, indent=2))
-
-            # # OX 문제 형식 수정
-            # ox_questions = self.fix_ox_questions(ox_questions)
-            # print("=== 파싱된 OX 문제 (수정됨) ===")
+            # 5. 파싱된 문제 후처리
+            # mc_questions = self.parse_multiple_choice(mc_questions_text)
+            # print("=== 파싱된 객관식 문제 (원본) ===")
+            # print(json.dumps(mc_questions, ensure_ascii=False, indent=2))
+            #
+            # ox_questions = self.parse_ox_questions(ox_questions_text)
+            # print("=== 파싱된 OX 문제 (원본) ===")
             # print(json.dumps(ox_questions, ensure_ascii=False, indent=2))
 
-            # 5. 파싱된 문제 후처리 - 상대적 시간 표현 변환
-            mc_questions = self.post_process_questions(mc_questions, current_date)
-            ox_questions = self.post_process_questions(ox_questions, current_date)
-            # ox_questions = self.clean_ox_questions(ox_questions)  # OX 문제 정리 추가
+            # 문제 후처리
+            # mc_questions = self.clean_multiple_choice(mc_questions)
+            # print("=== 후처리된 객관식 문제 ===")
+            # print(json.dumps(mc_questions, ensure_ascii=False, indent=2))
+            #
+            # mc_questions = self.post_process_questions(mc_questions, current_date)
+            # ox_questions = self.post_process_questions(ox_questions, current_date)
 
             # 6. 최종 결과 구성
             result = {
@@ -359,5 +357,30 @@ class QuizGenerator:
                 cleaned_question["explanation"] = f"해당 문제의 정답은 {'O' if cleaned_question['answer'] else 'X'}입니다."
 
             cleaned_questions.append(cleaned_question)
+
+        return cleaned_questions
+
+    def clean_multiple_choice(self, mc_questions: List[Dict]) -> List[Dict]:
+        """객관식 문제 후처리 - 선택지 정리"""
+        cleaned_questions = []
+
+        for question in mc_questions:
+            cleaned = question.copy()
+
+            # A), B) 등이 포함된 선택지를 정리
+            for i, option in enumerate(cleaned["options"]):
+                # 선택지에서 A), 1) 등의 접두사 제거
+                value = option["value"]
+                value = re.sub(r'^[A-D1-4][\.:\)]\s*', '', value)
+                cleaned["options"][i]["value"] = value.strip()
+
+            # 설명에서 불필요한 텍스트 제거
+            if cleaned["explanation"]:
+                # "정답: A" 등의 패턴 제거
+                cleaned["explanation"] = re.sub(r'정답\s*:?\s*[A-D1-4]', '', cleaned["explanation"])
+                # 여러 줄을 한 줄로 합치기
+                cleaned["explanation"] = ' '.join(cleaned["explanation"].split())
+
+            cleaned_questions.append(cleaned)
 
         return cleaned_questions
