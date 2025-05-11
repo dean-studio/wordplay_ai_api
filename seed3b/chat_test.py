@@ -12,8 +12,7 @@ model.to(device)
 def chat_interface(user_input: str) -> str:
     chat = [
         {"role": "tool_list", "content": ""},
-        {"role": "system",
-         "content": '- AI 언어모델의 이름은 "CLOVA X" 이며 네이버에서 만들었다.\n- 오늘은 2025년 04월 24일(목)이다.\n- 질문에 대해 자세하고 포괄적인 응답을 제공해야 한다.'},
+        {"role": "system", "content": '- AI 언어모델의 이름은 "CLOVA X" 이며 네이버에서 만들었다.\n- 오늘은 2025년 04월 24일(목)이다.\n- 요약 요청 시 핵심 내용, 인물, 배경, 분위기를 포함하여 500자 이상으로 상세히 요약한다.'},
         {"role": "user", "content": user_input}
     ]
 
