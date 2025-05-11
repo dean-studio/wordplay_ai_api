@@ -2,117 +2,80 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import gradio as gr
 
-# 모델, 토크나이저 로드
-model_name = "naver-hyperclovax/HyperCLOVAX-SEED-Vision-Instruct-3B"
+# 허깅페이스에 공개된 CLOVA X 1.5B 모델 리포지토리 사용
+model = AutoModelForCausalLM.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Vision-Instruct-3B")
+tokenizer = AutoTokenizer.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Vision-Instruct-3B")
+
+# GPU 사용 가능 시 장치 설정
 device = "cuda" if torch.cuda.is_available() else "cpu"
-
-print(f"기기: {device}")
-print(f"모델 로딩 중: {model_name}")
-
-try:
-    model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True).to(device=device)
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    print("모델 로딩 완료")
-except Exception as e:
-    print(f"모델 로딩 중 오류 발생: {e}")
-    model = None
-    tokenizer = None
+model.to(device)
 
 
-# 채팅 처리 함수
-def chat_with_clova(message, history):
-    """Gradio 채팅 인터페이스용 함수"""
-    if model is None or tokenizer is None:
-        return history + [(message, "모델 로딩에 실패했습니다. 콘솔 로그를 확인해주세요.")]
-
-    # 대화 기록 포맷 변환
-    formatted_history = [
-        {"role": "system", "content": "당신은 도움이 되는 AI 어시스턴트입니다."}
+def chat_interface(user_input: str) -> str:
+    # 클로바 X 샘플 템플릿: 시스템 메시지와 사용자 메시지 구성
+    chat = [
+        {"role": "tool_list", "content": ""},
+        {"role": "system", "content": '- AI 언어모델의 이름은 "CLOVA X" 이며 네이버에서 만들었다.\n- 오늘은 2025년 04월 24일(목)이다.'},
+        {"role": "user", "content": user_input}
     ]
 
-    # 대화 기록을 모델 입력 형식으로 변환
-    for user_msg, bot_msg in history:
-        formatted_history.append({"role": "user", "content": user_msg})
-        if bot_msg:  # 빈 응답이 아닌 경우에만 추가
-            formatted_history.append({"role": "assistant", "content": bot_msg})
+    # 채팅 템플릿을 적용해 모델 입력 데이터 생성 (generation prompt 포함)
+    inputs = tokenizer.apply_chat_template(
+        chat,
+        add_generation_prompt=True,
+        return_dict=True,
+        return_tensors="pt"
+    )
+    inputs = {k: v.to(device) for k, v in inputs.items()}
 
-    # 현재 메시지 추가
-    formatted_history.append({"role": "user", "content": message})
-
-    # 모델 입력 생성
-    input_ids = tokenizer.apply_chat_template(formatted_history, return_tensors="pt", tokenize=True)
-    input_ids = input_ids.to(device=device)
-
-    # 응답 생성
+    # 모델을 통한 응답 생성
     output_ids = model.generate(
-        input_ids,
-        max_new_tokens=512,
-        do_sample=True,
-        top_p=0.7,
-        temperature=0.6,
-        repetition_penalty=1.0,
+        **inputs,
+        max_length=5024,
+        stop_strings=["<|endofturn|>", "<|stop|>"],
+        tokenizer=tokenizer
     )
 
-    response = tokenizer.batch_decode(output_ids)[0]
+    # 디코딩: list 형태인 결과를 join하여 전체 텍스트 생성
+    output = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+    full_output = "\n".join(output)
 
-    # 응답에서 어시스턴트 부분 추출
-    if "<|assistant|>" in response:
-        assistant_response = response.split("<|assistant|>")[-1].strip()
+    # "assistant" 태그 이후의 내용만 추출 (태그가 없으면 전체 텍스트 반환)
+    if "assistant" in full_output:
+        assistant_reply = full_output.split("assistant", 1)[1].strip()
+        return assistant_reply
     else:
-        # 응답 구조가 다르면 사용자 입력 이후부터 추출 시도
-        try:
-            assistant_response = response.split(message)[-1].strip()
-        except:
-            assistant_response = response
-
-    # 중요: 이전 history에 새 메시지-응답 쌍을 추가하여 전체 대화 기록 반환
-    return history + [(message, assistant_response)]
+        return full_output
 
 
-# Gradio 인터페이스 설정
-def create_gradio_interface():
-    with gr.Blocks(title="CLOVA X 챗봇") as demo:
-        gr.Markdown("# CLOVA X 텍스트 챗봇")
-        gr.Markdown(f"네이버의 HyperCLOVAX-SEED-Vision-Instruct-3B 모델을 이용한 텍스트 챗봇입니다.")
-
-        chatbot = gr.Chatbot(height=600)
-        msg = gr.Textbox(
-            show_label=False,
-            placeholder="메시지를 입력하세요...",
-            container=False
-        )
-
-        with gr.Row():
-            submit_btn = gr.Button("전송")
-            clear_btn = gr.Button("대화 초기화")
-
-        # 예제 추가
-        gr.Examples(
-            examples=[
-                "안녕하세요, 자기소개 부탁해요.",
-                "한국의 유명한 관광지 추천해주세요.",
-                "인공지능에 대해 간단히 설명해줄래요?",
-                "서울에서 데이트하기 좋은 장소는 어디인가요?",
-                "요즘 인기있는 영화 추천해주세요.",
-            ],
-            inputs=msg
-        )
-
-        # 이벤트 설정
-        msg.submit(chat_with_clova, [msg, chatbot], [chatbot]).then(
-            lambda: "", None, msg
-        )
-
-        submit_btn.click(chat_with_clova, [msg, chatbot], [chatbot]).then(
-            lambda: "", None, msg
-        )
-
-        clear_btn.click(lambda: [], None, chatbot)
-
-    return demo
+def respond(message, chat_history):
+    response = chat_interface(message)
+    chat_history.append((message, response))
+    return "", chat_history
 
 
-# Gradio 인터페이스 실행
-if __name__ == "__main__":
-    gradio_interface = create_gradio_interface()
-    gradio_interface.launch(server_port=8283, server_name="0.0.0.0", share=True)
+# Custom CSS: 브라우저 전체 화면(100% width/height)으로 조정
+css = """
+html, body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+.gradio-container {
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0;
+    padding: 0;
+}
+"""
+
+with gr.Blocks(css=css) as demo:
+    gr.Markdown("## CLOVA X Chat (1.5B)")
+    chatbot = gr.Chatbot(label="CLOVA X Chat")
+    state = gr.State([])
+    with gr.Row():
+        txt = gr.Textbox(placeholder="질문을 입력하세요.", show_label=False)
+    txt.submit(respond, inputs=[txt, state], outputs=[txt, chatbot])
+
+demo.launch(server_port=8283, server_name="0.0.0.0")
