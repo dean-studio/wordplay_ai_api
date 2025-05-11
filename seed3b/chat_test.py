@@ -23,7 +23,7 @@ except Exception as e:
 def chat_with_clova(message, history):
     """Gradio 채팅 인터페이스용 함수"""
     if model is None or tokenizer is None:
-        return "모델 로딩에 실패했습니다. 콘솔 로그를 확인해주세요."
+        return history + [(message, "모델 로딩에 실패했습니다. 콘솔 로그를 확인해주세요.")]
 
     # 대화 기록 포맷 변환
     formatted_history = [
@@ -65,7 +65,8 @@ def chat_with_clova(message, history):
         except:
             assistant_response = response
 
-    return assistant_response
+    # 중요: 이전 history에 새 메시지-응답 쌍을 추가하여 전체 대화 기록 반환
+    return history + [(message, assistant_response)]
 
 
 # Gradio 인터페이스 설정
