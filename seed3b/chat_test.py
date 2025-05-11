@@ -12,7 +12,8 @@ model.to(device)
 def chat_interface(user_input: str) -> str:
     chat = [
         {"role": "tool_list", "content": ""},
-        {"role": "system", "content": '- AI 언어모델의 이름은 "CLOVA X" 이며 네이버에서 만들었다.\n- 오늘은 2025년 04월 24일(목)이다.'},
+        {"role": "system",
+         "content": '- AI 언어모델의 이름은 "CLOVA X" 이며 네이버에서 만들었다.\n- 오늘은 2025년 04월 24일(목)이다.\n- 질문에 대해 자세하고 포괄적인 응답을 제공해야 한다.'},
         {"role": "user", "content": user_input}
     ]
 
@@ -24,9 +25,15 @@ def chat_interface(user_input: str) -> str:
     )
     inputs = {k: v.to(device) for k, v in inputs.items()}
 
+    # 생성 매개변수 조정
     output_ids = model.generate(
         **inputs,
         max_length=5024,
+        do_sample=True,  # 샘플링 활성화
+        temperature=0.7,  # 창의성 조절
+        top_p=0.9,  # 다양성 조절
+        top_k=50,  # 토큰 선택 범위
+        repetition_penalty=1.2,  # 반복 방지
         stop_strings=["<|endofturn|>", "<|stop|>"],
         tokenizer=tokenizer
     )
@@ -63,7 +70,7 @@ html, body {
 """
 
 with gr.Blocks(css=css) as demo:
-    gr.Markdown("## CLOVA X Chat (1.5B)")
+    gr.Markdown("## CLOVA X Chat (3B)")
     chatbot = gr.Chatbot(label="CLOVA X Chat")
     state = gr.State([])
     with gr.Row():
