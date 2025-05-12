@@ -5,8 +5,8 @@ import os
 import sys
 from pathlib import Path
 
-from bookinfo.db_manager import DatabaseManager
-from bookinfo.naver_book_api import NaverBookAPI
+from db_manager import DatabaseManager
+from naver_book_api import NaverBookAPI
 # 상위 디렉토리에 있는 bookinfo 모듈을 import 하기 위한 설정
 # sys.path.append(str(Path(__file__).parent.parent))
 from main import KyoboBookScraper
