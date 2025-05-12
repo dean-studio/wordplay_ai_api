@@ -85,14 +85,9 @@ def process_single_book(book, scraper):
 
             # 네이버 업데이트가 성공하거나 결과가 없는 경우에만 스크래퍼 실행
             if update_success or not results.get(processed_book['isbn']):
-                print(f"🔍 교보문고에서 상세 정보 스크래핑 시작: {processed_book['title']}")
                 book_details = scraper.scrape(book_url)
 
                 if book_details:
-                    print(f"✅ 교보문고 상세 정보 스크래핑 완료: {processed_book['title']}")
-
-                    print(" [ book_details ] ", book_details )
-
                     # book_details에 kyobo_id 추가 (업데이트에 필요)
                     book_details['kyobo_id'] = processed_book['kyobo_id']
 
