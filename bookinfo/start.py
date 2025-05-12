@@ -244,7 +244,7 @@ def process_all_pages(max_pages=5, resume=True):
 
 def main():
     # 처리할 최대 페이지 수 설정
-    max_pages = 3
+    max_pages = 50
 
     # 이어서 시작할지 여부 확인
     resume = False
