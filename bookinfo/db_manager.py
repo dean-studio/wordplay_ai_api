@@ -120,7 +120,7 @@ class DatabaseManager:
         # 이미 존재하면 삽입하지 않음
         if existing_book:
             print(f"도서 kyobo_id={kyobo_id}는 이미 데이터베이스에 존재합니다.")
-            return True  # 이미 존재하므로 성공으로 간주
+            return False  # 이미 존재하므로 성공으로 간주
 
         # 존재하지 않으면 삽입
         insert_query = """
