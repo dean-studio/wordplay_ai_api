@@ -2,17 +2,39 @@
 # -*- coding: utf-8 -*-
 
 import time
+import sys
+import os
+from pathlib import Path
 from selenium.common.exceptions import TimeoutException, WebDriverException
 
-from bookinfo.extractors.publisher_review_extractory import extract_publisher_review
-from bookinfo.extractors.table_of_contents_extractory import extract_table_of_contents
-from utils.browser import setup_browser
-from extractors.isbn_extractor import extract_isbn
-from extractors.title_extractor import extract_title
-from extractors.subtitle_extractor import extract_subtitle
-from extractors.image_extractor import extract_cover_image, extract_description_image
-from extractors.description_extractor import extract_description_and_info_texts
-from extractors.category_extractor import extract_category
+# 현재 파일 경로를 기준으로 상위 디렉토리를 sys.path에 추가
+current_dir = Path(__file__).parent
+parent_dir = current_dir.parent
+sys.path.append(str(parent_dir))
+
+# 임포트 경로 수정
+try:
+    # 1. 상대 경로로 시도
+    from extractors.publisher_review_extractory import extract_publisher_review
+    from extractors.table_of_contents_extractory import extract_table_of_contents
+    from utils.browser import setup_browser
+    from extractors.isbn_extractor import extract_isbn
+    from extractors.title_extractor import extract_title
+    from extractors.subtitle_extractor import extract_subtitle
+    from extractors.image_extractor import extract_cover_image, extract_description_image
+    from extractors.description_extractor import extract_description_and_info_texts
+    from extractors.category_extractor import extract_category
+except ImportError:
+    # 2. bookinfo 패키지를 통한 절대 경로로 시도
+    from bookinfo.extractors.publisher_review_extractory import extract_publisher_review
+    from bookinfo.extractors.table_of_contents_extractory import extract_table_of_contents
+    from bookinfo.utils.browser import setup_browser
+    from bookinfo.extractors.isbn_extractor import extract_isbn
+    from bookinfo.extractors.title_extractor import extract_title
+    from bookinfo.extractors.subtitle_extractor import extract_subtitle
+    from bookinfo.extractors.image_extractor import extract_cover_image, extract_description_image
+    from bookinfo.extractors.description_extractor import extract_description_and_info_texts
+    from bookinfo.extractors.category_extractor import extract_category
 
 
 class KyoboBookScraper:
