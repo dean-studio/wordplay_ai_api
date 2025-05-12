@@ -72,7 +72,7 @@ class KyoboBookScraper:
         """
         book_info = self.init_book_info()
         page_source = driver.page_source
-        print(f"페이지 소스 길이: {len(page_source)} 바이트")
+        # print(f"페이지 소스 길이: {len(page_source)} 바이트")
 
         # 각 정보 추출
         book_info['isbn'] = extract_isbn(page_source)
@@ -112,7 +112,7 @@ class KyoboBookScraper:
 
                 try:
                     # 페이지 로딩
-                    print("페이지 로딩 시작...")
+                    # print("페이지 로딩 시작...")
                     start_time = time.time()
                     driver.get(url)
 
@@ -121,30 +121,30 @@ class KyoboBookScraper:
                     print(f"페이지 로딩 완료: {load_time:.2f}초")
 
                     # 도서 정보 추출
-                    print("정보 추출 시작...")
+                    # print("정보 추출 시작...")
                     book_info = self.extract_book_info(driver)
 
                     # 정보 추출 요약
-                    print("\n--- 정보 추출 결과 요약 ---")
-                    for key, value in book_info.items():
-                        if value:
-                            if key in ['description', 'category']:
-                                print(f"{key}: [데이터 있음, 길이: {len(value)} 바이트]")
-                            else:
-                                print(f"{key}: {value}")
-                        else:
-                            print(f"{key}: 추출 실패")
+                    # print("\n--- 정보 추출 결과 요약 ---")
+                    # for key, value in book_info.items():
+                    #     if value:
+                    #         if key in ['description', 'category']:
+                    #             print(f"{key}: [데이터 있음, 길이: {len(value)} 바이트]")
+                    #         else:
+                    #             print(f"{key}: {value}")
+                    #     else:
+                    #         print(f"{key}: 추출 실패")
 
                     # 주요 정보가 추출되었는지 확인
                     required_info = ['isbn', 'title', 'cover_image_url']
                     all_required_extracted = all(book_info[key] is not None for key in required_info)
 
                     if all_required_extracted:
-                        print("필수 정보 추출 성공!")
+                        # print("필수 정보 추출 성공!")
                         return book_info
 
                     # 일부 정보만 추출된 경우
-                    print("일부 정보만 추출됨. 추출된 정보 반환.")
+                    # print("일부 정보만 추출됨. 추출된 정보 반환.")
                     return book_info
 
                 except TimeoutException as te:

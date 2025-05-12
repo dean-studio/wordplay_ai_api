@@ -26,7 +26,8 @@ db = DatabaseManager(
 )
 
 def fetch_kyobo_bestsellers(page=1, per_page=50):
-    url = f"https://store.kyobobook.co.kr/api/gw/best/best-seller/online?page={page}&per=50&period=003&dsplDvsnCode=001&ymw=202405&dsplTrgtDvsnCode=004&saleCmdtClstCode=42"
+    # url = f"https://store.kyobobook.co.kr/api/gw/best/best-seller/online?page=2&per=50&period=003&dsplDvsnCode=001&ymw=202406&dsplTrgtDvsnCode=004&saleCmdtClstCode=42"
+    url = f"https://store.kyobobook.co.kr/api/gw/best/best-seller/online?page={page}&per=50&period=003&dsplDvsnCode=001&ymw=202406&dsplTrgtDvsnCode=004&saleCmdtClstCode=42"
     try:
         response = requests.get(url)
         response.raise_for_status()
