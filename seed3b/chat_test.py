@@ -3,16 +3,17 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import gradio as gr
 import time
 
-# 모델 및 토크나이저 로드
-model_id = "MLP-KTLim/llama-3-Korean-Bllossom-8B"
+# EXAONE-3 모델 및 토크나이저 로드
+model_id = "LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct"  # EXAONE 모델로 변경
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-# 양자화 설정 추가 (메모리 사용 최적화)
+# L4 GPU에 최적화된 설정
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    torch_dtype=torch.float16,  # bfloat16 대신 float16 사용
+    torch_dtype=torch.bfloat16,  # EXAONE은 bfloat16 지원이 더 나음
     device_map="auto",
-    load_in_8bit=True,  # 8비트 양자화 사용
+    trust_remote_code=True,  # EXAONE 모델은 이 옵션이 필요함
+    # L4 GPU는 24GB VRAM이 있으므로 8bit 양자화 없이도 실행 가능
 )
 
 
@@ -21,7 +22,7 @@ def warm_up_model():
     print("모델 예열 중...")
     sample_input = "안녕하세요"
     messages = [
-        {"role": "system", "content": "당신은 AI 어시스턴트입니다."},
+        {"role": "system", "content": "You are EXAONE model from LG AI Research, a helpful assistant."},
         {"role": "user", "content": sample_input}
     ]
     prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
@@ -39,12 +40,8 @@ warm_up_model()
 def chat_interface(user_input: str) -> str:
     start_time = time.time()  # 시간 측정 시작
 
-    # 짧은 시스템 프롬프트 사용
-    system_prompt = "당신은 유능한 AI 어시스턴트입니다."
-
-    # 간단한 요약 감지
-    if "요약" in user_input:
-        system_prompt += " 다음 텍스트를 자세하게 요약해주세요."
+    # EXAONE 모델에 권장되는 시스템 프롬프트 사용
+    system_prompt = "You are EXAONE model from LG AI Research, a helpful assistant."
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -64,15 +61,16 @@ def chat_interface(user_input: str) -> str:
     # 토큰화된 입력의 길이 확인
     input_length = inputs.input_ids.shape[1]
 
-    # 생성 매개변수 최적화
+    # EXAONE에 최적화된 생성 매개변수
     with torch.no_grad():
         output_ids = model.generate(
             **inputs,
-            max_new_tokens=512,  # 짧게 제한
+            max_new_tokens=512,
             do_sample=True,
-            temperature=0.7,
-            top_p=0.9,
-            repetition_penalty=1.2,
+            temperature=0.6,  # EXAONE 문서에서 권장하는 값
+            top_p=0.95,       # EXAONE 문서에서 권장하는 값
+            repetition_penalty=1.0,
+            eos_token_id=tokenizer.eos_token_id,
         )
 
     # 생성된, 입력을 제외한 텍스트만 디코딩
@@ -110,8 +108,8 @@ html, body {
 """
 
 with gr.Blocks(css=css) as demo:
-    gr.Markdown("## Bllossom-8B 한국어 챗봇")
-    chatbot = gr.Chatbot(label="Bllossom Chat")
+    gr.Markdown("## EXAONE-3.5-7.8B 한국어/영어 챗봇")
+    chatbot = gr.Chatbot(label="EXAONE Chat")
     state = gr.State([])
     with gr.Row():
         txt = gr.Textbox(placeholder="메시지를 입력하세요", show_label=False)
