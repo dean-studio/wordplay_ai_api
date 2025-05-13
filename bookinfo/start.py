@@ -7,16 +7,12 @@ from pathlib import Path
 
 from db_manager import DatabaseManager
 from naver_book_api import NaverBookAPI
-# 상위 디렉토리에 있는 bookinfo 모듈을 import 하기 위한 설정
-# sys.path.append(str(Path(__file__).parent.parent))
 from main import KyoboBookScraper
 
-# scraper = KyoboBookScraper()
-
 naver_api = NaverBookAPI(
-            client_id="Ify9yiAgxNVLZrnrF7pV",
-            client_secret="Svz3ireH_a"
-        )
+    client_id="Ify9yiAgxNVLZrnrF7pV",
+    client_secret="Svz3ireH_a"
+)
 
 db = DatabaseManager(
     host='wordplayapi.mycafe24.com',
@@ -25,9 +21,9 @@ db = DatabaseManager(
     db='wordplayapi'
 )
 
-def fetch_kyobo_bestsellers(page=1, per_page=50):
-    # url = f"https://store.kyobobook.co.kr/api/gw/best/best-seller/online?page=2&per=50&period=003&dsplDvsnCode=001&ymw=202406&dsplTrgtDvsnCode=004&saleCmdtClstCode=42"
-    url = f"https://store.kyobobook.co.kr/api/gw/best/best-seller/online?page={page}&per=50&period=003&dsplDvsnCode=001&ymw=202407&dsplTrgtDvsnCode=004&saleCmdtClstCode=42"
+
+def fetch_kyobo_bestsellers(page=1, per_page=50, ymw='202407'):
+    url = f"https://store.kyobobook.co.kr/api/gw/best/best-seller/online?page={page}&per=50&period=003&dsplDvsnCode=001&ymw={ymw}&dsplTrgtDvsnCode=004&saleCmdtClstCode=42"
     try:
         response = requests.get(url)
         response.raise_for_status()
@@ -38,19 +34,16 @@ def fetch_kyobo_bestsellers(page=1, per_page=50):
 
 
 def process_single_book(book, scraper):
-    # 기본 정보 추출
     processed_book = {
         'kyobo_id': book.get('saleCmdtid', ''),
         'isbn': book.get('cmdtCode', ''),
         'title': book.get('cmdtName', '')
     }
 
-    # 도서 상세 URL 생성
     book_url = f"https://product.kyobobook.co.kr/detail/{processed_book['kyobo_id']}"
     print(f"Processing book: {processed_book['title']} ({book_url})")
 
     try:
-        # 기본 정보 저장
         book_data = {
             'kyobo_id': processed_book['kyobo_id'],
             'isbn': processed_book['isbn'],
@@ -61,7 +54,6 @@ def process_single_book(book, scraper):
         if insert_result:
             print(f"✅ 기본 정보 저장 완료: {processed_book['title']}")
 
-            # 네이버 API에서 추가 정보 가져오기
             isbn_list = [processed_book['isbn']]
             results = naver_api.search_multiple_isbns(isbn_list)
 
@@ -75,7 +67,6 @@ def process_single_book(book, scraper):
                         'kyobo_id': processed_book['kyobo_id']
                     }
 
-                    # 네이버 정보로 업데이트
                     update_success = db.update_book_info(book_data)
                     if update_success:
                         print(f"✅ 네이버 정보 업데이트 완료: {processed_book['title']}")
@@ -84,21 +75,17 @@ def process_single_book(book, scraper):
                 else:
                     print(f"ISBN {isbn}: 네이버 검색 결과 없음")
 
-            # 네이버 업데이트가 성공하거나 결과가 없는 경우에만 스크래퍼 실행
             if update_success or not results.get(processed_book['isbn']):
                 book_details = scraper.scrape(book_url)
 
                 if book_details:
-                    # book_details에 kyobo_id 추가 (업데이트에 필요)
                     book_details['kyobo_id'] = processed_book['kyobo_id']
 
-                    # 스크래핑한 상세 정보로 다시 업데이트
                     if db.update_book(book_details):
                         print(f"✅ 교보문고 상세 정보 업데이트 완료: {processed_book['title']}")
                     else:
                         print(f"❌ 교보문고 상세 정보 업데이트 실패: {processed_book['title']}")
 
-                    # processed_book 객체에 상세 정보 병합
                     processed_book.update(book_details)
                 else:
                     print(f"❌ 교보문고 상세 정보 스크래핑 실패: {processed_book['title']}")
@@ -110,28 +97,26 @@ def process_single_book(book, scraper):
     except Exception as e:
         print(f"❌ 도서 처리 중 오류 발생: {processed_book['title']}: {e}")
 
-    # 크롤링 간 간격을 두어 서버에 부담을 줄입니다
     time.sleep(2)
 
     return processed_book
 
 
-def save_state(current_page, current_book_index, processed_data):
+def save_state(current_page, current_book_index, processed_data, current_ymw):
     state = {
         'current_page': current_page,
         'current_book_index': current_book_index,
+        'current_ymw': current_ymw,
         'last_updated': time.strftime('%Y-%m-%d %H:%M:%S')
     }
 
-    # 상태 파일 저장
     with open('crawler_state.json', 'w', encoding='utf-8') as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
 
-    # 지금까지 처리된 데이터 저장
-    with open('kyobo_bestsellers_partial.json', 'w', encoding='utf-8') as f:
+    with open(f'kyobo_bestsellers_partial_{current_ymw}.json', 'w', encoding='utf-8') as f:
         json.dump(processed_data, f, ensure_ascii=False, indent=2)
 
-    print(f"Saved state: Page {current_page}, Book {current_book_index}")
+    print(f"Saved state: YMW {current_ymw}, Page {current_page}, Book {current_book_index}")
 
 
 def load_state():
@@ -140,59 +125,58 @@ def load_state():
             with open('crawler_state.json', 'r', encoding='utf-8') as f:
                 state = json.load(f)
 
-            # 이전에 저장된 데이터가 있는지 확인
-            if os.path.exists('kyobo_bestsellers_partial.json'):
-                with open('kyobo_bestsellers_partial.json', 'r', encoding='utf-8') as f:
+            current_ymw = state.get('current_ymw', '202407')
+
+            if os.path.exists(f'kyobo_bestsellers_partial_{current_ymw}.json'):
+                with open(f'kyobo_bestsellers_partial_{current_ymw}.json', 'r', encoding='utf-8') as f:
                     processed_data = json.load(f)
             else:
                 processed_data = []
 
             print(
-                f"Loaded state: Page {state['current_page']}, Book {state['current_book_index']}, Last updated: {state['last_updated']}")
-            return state['current_page'], state['current_book_index'], processed_data
+                f"Loaded state: YMW {current_ymw}, Page {state['current_page']}, Book {state['current_book_index']}, Last updated: {state['last_updated']}")
+            return state['current_page'], state['current_book_index'], processed_data, current_ymw
         except Exception as e:
             print(f"Error loading state: {e}")
 
-    # 상태 파일이 없거나 오류가 발생하면 처음부터 시작
-    return 1, 0, []
+    return 1, 0, [], '202407'
 
 
-def process_all_pages(max_pages=5, resume=True):
-    # KyoboBookScraper 인스턴스 생성
+def process_all_pages(max_pages=5, resume=True, ymw='202407'):
     scraper = KyoboBookScraper()
 
-    # 상태 로드 (이어서 시작할지 여부에 따라)
     if resume:
-        current_page, current_book_index, all_processed_data = load_state()
+        current_page, current_book_index, all_processed_data, current_ymw = load_state()
+        if current_ymw != ymw:
+            print(f"Starting new YMW period: {ymw}")
+            current_page, current_book_index, all_processed_data = 1, 0, []
     else:
         current_page, current_book_index, all_processed_data = 1, 0, []
+        current_ymw = ymw
 
     try:
-        # 지정된 페이지부터 최대 페이지까지 처리
         for page in range(current_page, max_pages + 1):
             print(f"\n{'=' * 50}")
-            print(f"Processing page {page}...")
+            print(f"Processing YMW {ymw}, page {page}...")
             print(f"{'=' * 50}\n")
 
-            raw_data = fetch_kyobo_bestsellers(page)
+            raw_data = fetch_kyobo_bestsellers(page, 50, ymw)
 
             if not raw_data or 'data' not in raw_data or 'bestSeller' not in raw_data['data']:
                 print(f"No valid data found on page {page}. Stopping.")
-                save_state(page + 1, 0, all_processed_data)  # 다음 페이지부터 시작하도록 저장
+                save_state(page + 1, 0, all_processed_data, ymw)
                 break
 
             books = raw_data['data']['bestSeller']
             if not books:
                 print(f"No books found on page {page}. Stopping.")
-                save_state(page + 1, 0, all_processed_data)  # 다음 페이지부터 시작하도록 저장
+                save_state(page + 1, 0, all_processed_data, ymw)
                 break
 
             print(f"Found {len(books)} books on page {page}")
 
-            # 이 페이지에서 시작할 책 인덱스 결정
             start_book_index = current_book_index if page == current_page else 0
 
-            # 각 책을 순차적으로 처리
             for i, book in enumerate(books[start_book_index:], start_book_index + 1):
                 try:
                     print(f"\n{'*' * 30}")
@@ -202,22 +186,18 @@ def process_all_pages(max_pages=5, resume=True):
                     processed_book = process_single_book(book, scraper)
                     all_processed_data.append(processed_book)
 
-                    # 매 책 처리 후 상태 저장
-                    save_state(page, i, all_processed_data)
+                    save_state(page, i, all_processed_data, ymw)
 
                 except Exception as e:
                     print(f"Error processing book {i} on page {page}: {e}")
-                    save_state(page, i, all_processed_data)  # 오류 발생 시 현재 상태 저장
-                    raise  # 예외를 다시 발생시켜 처리 중단
+                    save_state(page, i, all_processed_data, ymw)
+                    raise
 
-            # 페이지 처리 완료 시 상태 저장
-            current_book_index = 0  # 다음 페이지는 처음부터 시작
-            save_state(page + 1, current_book_index, all_processed_data)
+            current_book_index = 0
+            save_state(page + 1, current_book_index, all_processed_data, ymw)
 
-            # 페이지 처리 완료 메시지
             print(f"\nCompleted processing page {page}. Total books processed so far: {len(all_processed_data)}")
 
-            # 페이지 간 간격
             if page < max_pages:
                 print("Waiting before fetching next page...")
                 time.sleep(5)
@@ -229,37 +209,46 @@ def process_all_pages(max_pages=5, resume=True):
         print(f"\nError occurred: {e}. Current state has been saved.")
         return all_processed_data
 
-    # 모든 페이지 처리 완료 시 상태 파일 삭제
-    if os.path.exists('crawler_state.json'):
-        os.remove('crawler_state.json')
-    if os.path.exists('kyobo_bestsellers_partial.json'):
-        os.remove('kyobo_bestsellers_partial.json')
+    with open(f'kyobo_bestsellers_complete_{ymw}.json', 'w', encoding='utf-8') as f:
+        json.dump(all_processed_data, f, ensure_ascii=False, indent=2)
+    print(f"All data for YMW {ymw} saved to kyobo_bestsellers_complete_{ymw}.json")
 
     return all_processed_data
 
 
 def main():
-    # 처리할 최대 페이지 수 설정
     max_pages = 50
+    ymw_periods = ['202407', '202408', '202409', '202410', '202411', '202412', '202501', '202502', '202503', '202504']
 
-    # 이어서 시작할지 여부 확인
-    resume = False
-    if os.path.exists('crawler_state.json'):
-        choice = input("Previous crawling state found. Resume? (y/n): ").lower()
-        resume = choice == 'y' or choice == ''  # 엔터키도 yes로 처리
+    for ymw in ymw_periods:
+        print(f"\n{'#' * 70}")
+        print(f"Starting to process YMW period: {ymw}")
+        print(f"{'#' * 70}\n")
 
-    print(f"Starting to process up to {max_pages} pages of Kyobo bestsellers")
-    processed_data = process_all_pages(max_pages, resume)
+        resume = False
+        if os.path.exists('crawler_state.json'):
+            with open('crawler_state.json', 'r', encoding='utf-8') as f:
+                state = json.load(f)
+                current_ymw = state.get('current_ymw', '202407')
 
-    if processed_data:
-        print(f"\nTotal books processed across all pages: {len(processed_data)}")
+            if current_ymw == ymw:
+                choice = input(f"Previous crawling state found for YMW {ymw}. Resume? (y/n): ").lower()
+                resume = choice == 'y' or choice == ''
 
-        # 결과 저장
-        with open('kyobo_bestsellers_complete.json', 'w', encoding='utf-8') as f:
-            json.dump(processed_data, f, ensure_ascii=False, indent=2)
-        print("All data saved to kyobo_bestsellers_complete.json")
-    else:
-        print("No data was processed.")
+        processed_data = process_all_pages(max_pages, resume, ymw)
+
+        if processed_data:
+            print(f"\nTotal books processed for YMW {ymw}: {len(processed_data)}")
+        else:
+            print(f"No data was processed for YMW {ymw}.")
+
+        if os.path.exists('crawler_state.json'):
+            os.remove('crawler_state.json')
+        if os.path.exists(f'kyobo_bestsellers_partial_{ymw}.json'):
+            os.remove(f'kyobo_bestsellers_partial_{ymw}.json')
+
+        print(f"Completed processing YMW period: {ymw}")
+        time.sleep(10)  # 다음 ymw 처리 전 10초 대기
 
 
 if __name__ == "__main__":
