@@ -20,52 +20,34 @@ db = DatabaseManager(
 
 def get_unscraped_books(limit=50):
     """스크래핑되지 않은 도서 ID 목록 가져오기"""
-    # 새로운 커서 사용
-    cursor = db.conn.cursor()
-    try:
-        query = """
-        SELECT kyobo_id 
-        FROM book_scraping 
-        WHERE is_scraped = FALSE 
-        LIMIT %s
-        """
-        cursor.execute(query, (limit,))
-        result = cursor.fetchall()
-        return [row[0] for row in result] if result else []
-    finally:
-        cursor.close()
+    query = """
+    SELECT kyobo_id 
+    FROM book_scraping 
+    WHERE is_scraped = FALSE 
+    LIMIT %s
+    """
+    # fetch_all 메서드 사용
+    result = db.fetch_all(query, (limit,))
+    return [book['kyobo_id'] for book in result] if result else []
 
 
 def mark_book_as_scraped(kyobo_id, success=True):
     """도서를 스크래핑 완료로 표시"""
-    cursor = db.conn.cursor()
-    try:
-        query = """
-        UPDATE book_scraping 
-        SET is_scraped = %s, scraped_at = %s 
-        WHERE kyobo_id = %s
-        """
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        cursor.execute(query, (success, current_time, kyobo_id))
-        db.conn.commit()
-        return True
-    except Exception as e:
-        db.conn.rollback()
-        print(f"도서 상태 업데이트 오류: {e}")
-        return False
-    finally:
-        cursor.close()
+    query = """
+    UPDATE book_scraping 
+    SET is_scraped = %s, scraped_at = %s 
+    WHERE kyobo_id = %s
+    """
+    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    return db.execute_query(query, (success, current_time, kyobo_id))
 
 
 def check_book_exists(kyobo_id):
     """도서가 이미 books 테이블에 존재하는지 확인"""
-    cursor = db.conn.cursor()
-    try:
-        query = "SELECT 1 FROM books WHERE kyobo_id = %s"
-        cursor.execute(query, (kyobo_id,))
-        return bool(cursor.fetchone())
-    finally:
-        cursor.close()
+    query = "SELECT 1 FROM kyobo_books WHERE kyobo_id = %s"
+    # fetch_one 메서드 사용
+    result = db.fetch_one(query, (kyobo_id,))
+    return result is not None
 
 
 def process_single_book(kyobo_id, scraper):
@@ -215,23 +197,32 @@ def main():
     parser.add_argument('--max', type=int, default=None, help='최대 처리할 도서 수')
     args = parser.parse_args()
 
+    # 데이터베이스 연결 확인
+    if not db.connect():
+        print("데이터베이스 연결 실패. 프로그램을 종료합니다.")
+        sys.exit(1)
+
     print(f"\n{'#' * 70}")
     print(f"Starting to process books from book_scraping table")
     print(f"Batch size: {args.batch}, Max books: {args.max or 'No limit'}")
     print(f"{'#' * 70}\n")
 
-    processed_ids, successful_ids, failed_ids = process_books(args.batch, args.max)
+    try:
+        processed_ids, successful_ids, failed_ids = process_books(args.batch, args.max)
 
-    print(f"\nScraping completed!")
-    print(f"Total processed: {len(processed_ids)}")
-    print(f"Successful: {len(successful_ids)}")
-    print(f"Failed: {len(failed_ids)}")
+        print(f"\nScraping completed!")
+        print(f"Total processed: {len(processed_ids)}")
+        print(f"Successful: {len(successful_ids)}")
+        print(f"Failed: {len(failed_ids)}")
 
-    # 실패한 ID들 기록
-    if failed_ids:
-        with open('failed_kyobo_ids.json', 'w', encoding='utf-8') as f:
-            json.dump(failed_ids, f, ensure_ascii=False, indent=2)
-        print(f"Failed IDs saved to failed_kyobo_ids.json")
+        # 실패한 ID들 기록
+        if failed_ids:
+            with open('failed_kyobo_ids.json', 'w', encoding='utf-8') as f:
+                json.dump(failed_ids, f, ensure_ascii=False, indent=2)
+            print(f"Failed IDs saved to failed_kyobo_ids.json")
+    finally:
+        # 종료 시 DB 연결 닫기
+        db.close()
 
 
 if __name__ == "__main__":
