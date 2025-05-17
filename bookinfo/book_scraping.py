@@ -7,14 +7,9 @@ from pathlib import Path
 from datetime import datetime
 
 from db_manager import DatabaseManager
-from naver_book_api import NaverBookAPI
 from main import KyoboBookScraper
 
-naver_api = NaverBookAPI(
-    client_id="Ify9yiAgxNVLZrnrF7pV",
-    client_secret="Svz3ireH_a"
-)
-
+# 기존 DB 관리자 사용
 db = DatabaseManager(
     host='wordplayapi.mycafe24.com',
     user='wordplayapi',
@@ -24,27 +19,57 @@ db = DatabaseManager(
 
 
 def get_unscraped_books(limit=50):
-    query = """
-    SELECT kyobo_id 
-    FROM book_scraping 
-    WHERE is_scraped = FALSE 
-    LIMIT %s
-    """
-    result = db.execute_query(query, (limit,))
-    return [row[0] for row in result] if result else []
+    """스크래핑되지 않은 도서 ID 목록 가져오기"""
+    # 새로운 커서 사용
+    cursor = db.conn.cursor()
+    try:
+        query = """
+        SELECT kyobo_id 
+        FROM book_scraping 
+        WHERE is_scraped = FALSE 
+        LIMIT %s
+        """
+        cursor.execute(query, (limit,))
+        result = cursor.fetchall()
+        return [row[0] for row in result] if result else []
+    finally:
+        cursor.close()
 
 
 def mark_book_as_scraped(kyobo_id, success=True):
-    query = """
-    UPDATE book_scraping 
-    SET is_scraped = %s, scraped_at = %s 
-    WHERE kyobo_id = %s
-    """
-    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    return db.execute_query(query, (success, current_time, kyobo_id))
+    """도서를 스크래핑 완료로 표시"""
+    cursor = db.conn.cursor()
+    try:
+        query = """
+        UPDATE book_scraping 
+        SET is_scraped = %s, scraped_at = %s 
+        WHERE kyobo_id = %s
+        """
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        cursor.execute(query, (success, current_time, kyobo_id))
+        db.conn.commit()
+        return True
+    except Exception as e:
+        db.conn.rollback()
+        print(f"도서 상태 업데이트 오류: {e}")
+        return False
+    finally:
+        cursor.close()
+
+
+def check_book_exists(kyobo_id):
+    """도서가 이미 books 테이블에 존재하는지 확인"""
+    cursor = db.conn.cursor()
+    try:
+        query = "SELECT 1 FROM books WHERE kyobo_id = %s"
+        cursor.execute(query, (kyobo_id,))
+        return bool(cursor.fetchone())
+    finally:
+        cursor.close()
 
 
 def process_single_book(kyobo_id, scraper):
+    """단일 도서 처리"""
     book_url = f"https://product.kyobobook.co.kr/detail/{kyobo_id}"
     print(f"Processing book with kyobo_id: {kyobo_id} ({book_url})")
 
@@ -55,10 +80,7 @@ def process_single_book(kyobo_id, scraper):
             book_details['kyobo_id'] = kyobo_id
 
             # 기본 책 정보가 있는지 확인
-            book_exists = db.execute_query(
-                "SELECT 1 FROM books WHERE kyobo_id = %s",
-                (kyobo_id,)
-            )
+            book_exists = check_book_exists(kyobo_id)
 
             if book_exists:
                 # 책이 이미 존재하면 업데이트
@@ -83,23 +105,6 @@ def process_single_book(kyobo_id, scraper):
 
                 if db.insert_book(book_data) and db.update_book(book_details):
                     print(f"✅ 새 책 정보 추가 및 업데이트 완료: {kyobo_id}")
-
-                    # ISBN이 있으면 네이버 API로 추가 정보 가져오기
-                    if isbn:
-                        results = naver_api.search_multiple_isbns([isbn])
-
-                        for isbn, info in results.items():
-                            if info:
-                                naver_data = {
-                                    'author': info['author'],
-                                    'publisher': info['publisher'],
-                                    'publication_date': info['pubdate'],
-                                    'kyobo_id': kyobo_id
-                                }
-
-                                if db.update_book_info(naver_data):
-                                    print(f"✅ 네이버 정보 업데이트 완료: {kyobo_id}")
-
                     mark_book_as_scraped(kyobo_id, True)
                     return True
                 else:
@@ -118,6 +123,7 @@ def process_single_book(kyobo_id, scraper):
 
 
 def save_state(processed_ids, successful_ids, failed_ids):
+    """현재 진행 상태 저장"""
     state = {
         'processed_count': len(processed_ids),
         'successful_count': len(successful_ids),
@@ -133,6 +139,7 @@ def save_state(processed_ids, successful_ids, failed_ids):
 
 
 def process_books(batch_size=50, max_books=None):
+    """스크래핑 되지 않은 도서 배치 처리"""
     scraper = KyoboBookScraper()
     processed_ids = []
     successful_ids = []
@@ -192,12 +199,10 @@ def process_books(batch_size=50, max_books=None):
 
     except KeyboardInterrupt:
         print("\nProcess interrupted by user. Current state has been saved.")
+        save_state(processed_ids, successful_ids, failed_ids)
     except Exception as e:
         print(f"\nError occurred: {e}. Current state has been saved.")
-
-    print(f"\nTotal books processed: {len(processed_ids)}")
-    print(f"Successful: {len(successful_ids)}")
-    print(f"Failed: {len(failed_ids)}")
+        save_state(processed_ids, successful_ids, failed_ids)
 
     return processed_ids, successful_ids, failed_ids
 
