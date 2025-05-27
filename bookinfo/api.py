@@ -81,9 +81,10 @@ async def scrape_book_get(kyobo_id: str):
     return await scrape_book(request)
 
 if __name__ == "__main__":
+    print("Server running on: http://35.233.152.5:8000")
     uvicorn.run(
         "api:app",
-        host="35.233.152.5",
+        host="0.0.0.0",
         port=8000,
         reload=True,
         log_level="info"
