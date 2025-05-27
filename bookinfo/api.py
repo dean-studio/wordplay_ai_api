@@ -6,7 +6,7 @@ import asyncio
 import httpx
 from datetime import datetime
 
-from main import KyoboBookScraper
+from scraper import KyoboBookScraper
 
 app = FastAPI(
     title="Kyobo Book Scraper API",
