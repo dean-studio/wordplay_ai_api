@@ -3,7 +3,7 @@ module.exports = {
     {
       name: "kyobo-api",
       script: "/home/dean/fastapi/venv/bin/python",
-      args: "-m uvicorn api:app --host 0.0.0.0 --port 8000",
+      args: "api.py",
       instances: 1,
       autorestart: true,
       watch: false,
