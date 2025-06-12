@@ -38,7 +38,7 @@ def print_result(book_info):
 
 def main():
     """메인 함수"""
-    url = "https://product.kyobobook.co.kr/detail/S000216001927"
+    url = "https://product.kyobobook.co.kr/detail/S000216371526"
 
     print("도서 정보 스크래핑 시작")
     scraper = KyoboBookScraper()
