@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from selenium.common.exceptions import TimeoutException, WebDriverException
 
-from bookinfo.extractors.preview_extractor import extract_preview_pid, extract_preview
+
 
 # 현재 파일 경로를 기준으로 상위 디렉토리를 sys.path에 추가
 current_dir = Path(__file__).parent
@@ -26,6 +26,7 @@ try:
     from extractors.image_extractor import extract_cover_image, extract_description_image
     from extractors.description_extractor import extract_description_and_info_texts
     from extractors.category_extractor import extract_category
+    from extractors.preview_extractor import extract_preview
 except ImportError:
     # 2. bookinfo 패키지를 통한 절대 경로로 시도
     from bookinfo.extractors.publisher_review_extractory import extract_publisher_review
@@ -37,6 +38,7 @@ except ImportError:
     from bookinfo.extractors.image_extractor import extract_cover_image, extract_description_image
     from bookinfo.extractors.description_extractor import extract_description_and_info_texts
     from bookinfo.extractors.category_extractor import extract_category
+    from bookinfo.extractors.preview_extractor import extract_preview
 
 
 class KyoboBookScraper:
