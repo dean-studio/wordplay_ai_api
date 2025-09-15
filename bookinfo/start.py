@@ -163,6 +163,7 @@ def process_all_pages(max_pages=5, resume=True, ymw='202407'):
 
             raw_data = fetch_kyobo_bestsellers(page, 50, ymw)
 
+            print(raw_data)
             if not raw_data or 'data' not in raw_data or 'bestSeller' not in raw_data['data']:
                 print(f"No valid data found on page {page}. Stopping.")
                 save_state(page + 1, 0, all_processed_data, ymw)
