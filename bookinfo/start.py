@@ -218,7 +218,7 @@ def process_all_pages(max_pages=5, resume=True, ymw='202407'):
 
 def main():
     max_pages = 50
-    ymw_periods = ['202505','202506','202507',,'202508']
+    ymw_periods = ['202505','202506','202507','202508']
 
     for ymw in ymw_periods:
         print(f"\n{'#' * 70}")
