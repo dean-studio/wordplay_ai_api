@@ -1,6 +1,13 @@
 # wordplay_ai_api
 wordplay_ai_api22
 
+## 실행
+```
+source venv/bin/activate
+cd bookinfo/
+pm2 start python --name kyobo-api -- api.py
+```
+
 ## redoc
 http://34.53.35.1:8000/redoc
 
@@ -14,6 +21,8 @@ http://35.233.152.5:7860
 https://huggingface.co/datasets/MarkrAI/KoCommercial-Dataset
 
 https://huggingface.co/datasets/KorQuAD/squad_kor_v2
+
+
 
 ## venv
 
