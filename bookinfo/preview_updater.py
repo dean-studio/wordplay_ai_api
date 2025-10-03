@@ -20,8 +20,8 @@ scraper = KyoboBookScraper()
 def get_books_without_preview():
     """preview_images가 null인 도서 목록 조회 (상위 10개)"""
     query = """
-    SELECT id, kyobo_id, title 
-    FROM kyobo_books 
+    SELECT id, kyobo_id, title
+    FROM kyobo_books
     WHERE preview_images IS NULL
     ORDER BY id
     """
@@ -37,8 +37,8 @@ def get_books_without_preview():
 def update_preview_images(book_id, preview_images):
     """preview_images 컬럼 업데이트"""
     query = """
-    UPDATE kyobo_books 
-    SET preview_images = %s, 
+    UPDATE kyobo_books
+    SET preview_images = %s,
         updated_at = NOW()
     WHERE id = %s
     """
@@ -111,8 +111,8 @@ def process_all_books():
 def process_specific_book(kyobo_id):
     """특정 kyobo_id로 도서 처리"""
     query = """
-    SELECT id, kyobo_id, title 
-    FROM kyobo_books 
+    SELECT id, kyobo_id, title
+    FROM kyobo_books
     WHERE kyobo_id = %s
     """
 
@@ -122,7 +122,7 @@ def process_specific_book(kyobo_id):
             success = process_single_book(book['kyobo_id'], book['id'], book['title'])
             return success
         else:
-            print(f"❌ kyobo_id '{kyobo_id}' 도서를 찾을 수 없습니다.")
+            print(f"❌ kyobo_id '{kyobo_id}' 도서를 찾을 수 없습니다.")preview_image_text
             return False
     except Exception as e:
         print(f"❌ 특정 도서 처리 실패: {e}")
