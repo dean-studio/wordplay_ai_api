@@ -3,9 +3,10 @@ wordplay_ai_api22
 
 ## 실행
 ```
+cd fastapi
 source venv/bin/activate
 cd bookinfo/
-pm2 start python --name kyobo-api -- api.py
+pm2 start python --name kyobo-api -- api.py 
 ```
 
 ## redoc
